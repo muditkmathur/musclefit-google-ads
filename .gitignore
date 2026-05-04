@@ -1,4 +1,14 @@
 node_modules/
 .env
+.env.local
 output/reports/
 data/
+
+.next/
+out/
+next-env.d.ts.bak
+.DS_Store
+*.tsbuildinfo
+
+# pnpm cache when run outside global store
+.pnpm-store/

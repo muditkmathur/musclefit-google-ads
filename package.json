@@ -1,18 +1,45 @@
 {
   "name": "musclefit-google-ads",
   "version": "1.0.0",
-  "description": "Google Ads API scripts for muscle fit",
-  "main": "index.js",
+  "description": "Google Ads dashboard and CLI tooling for muscle fit",
+  "private": true,
   "type": "module",
   "packageManager": "pnpm@9.0.0",
   "scripts": {
-    "search-terms": "node search-terms.js",
-    "ngram-analysis": "node ngram-analysis.js",
-    "campaign-keywords": "node campaign-keywords.js",
-    "report": "node report.js"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "report": "tsx scripts/report.ts",
+    "search-terms": "tsx scripts/search-terms.ts",
+    "ngram-analysis": "tsx scripts/ngram-analysis.ts",
+    "campaign-keywords": "tsx scripts/campaign-keywords.ts"
   },
   "dependencies": {
+    "@emotion/cache": "^11.13.5",
+    "@emotion/react": "^11.13.5",
+    "@emotion/styled": "^11.13.5",
+    "@mui/icons-material": "^6.1.10",
+    "@mui/material": "^6.1.10",
+    "@mui/material-nextjs": "^6.1.9",
+    "dotenv": "^16.0.0",
     "google-ads-api": "^23.0.0",
-    "dotenv": "^16.0.0"
+    "next": "^15.1.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^15.1.3",
+    "postcss": "^8.5.0",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
   }
 }
