@@ -65,6 +65,7 @@ export async function getCampaignReport(input: CampaignReportActionInput = {}): 
       range,
       granularity,
       includeDaily: true,
+      includeDemographics: true,
       includePrevious: true,
       saveToDisk: Boolean(input.saveToDisk),
     });

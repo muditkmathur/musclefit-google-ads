@@ -58,7 +58,8 @@ export interface CampaignReport {
   previous_totals: CampaignTotals;
   previous_totals_raw: CampaignTotalsRaw;
   daily?: CampaignDailyReport;
-  saved_to?: { summary: string; daily?: string };
+  demographics?: CampaignDemographicsReport;
+  saved_to?: { summary: string; daily?: string; demographics?: string };
 }
 
 export interface CampaignDailyEntry {
@@ -84,6 +85,44 @@ export interface CampaignDailyReport {
   period: string;
   date_range: DateRange;
   campaigns: Array<{ campaign: string; days: CampaignDailyEntry[] }>;
+}
+
+export type DemographicDimension = "gender" | "age_range";
+
+export interface CampaignDemographicMetrics {
+  impressions: number;
+  clicks: number;
+  ctr: number | null;
+  spend: number;
+  conversions: number;
+  avg_cpc: number;
+}
+
+export interface CampaignDemographicDailyEntry extends CampaignDemographicMetrics {
+  date: string;
+  /** Stable identifier for the demographic value (e.g. raw enum/code from API or normalized key). */
+  bucket: string;
+  /** Human-friendly label for the bucket (e.g. "Male", "18-24", "Undetermined"). */
+  bucketLabel: string;
+}
+
+export interface CampaignDemographicSlice {
+  dimension: DemographicDimension;
+  /** All buckets observed in `days`, in display order. */
+  buckets: Array<{ key: string; label: string }>;
+  days: CampaignDemographicDailyEntry[];
+}
+
+export interface CampaignDemographicEntry {
+  campaign: string;
+  slices: CampaignDemographicSlice[];
+}
+
+export interface CampaignDemographicsReport {
+  generated_at: string;
+  period: string;
+  date_range: DateRange;
+  campaigns: CampaignDemographicEntry[];
 }
 
 export interface SearchTermRow {

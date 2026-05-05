@@ -135,7 +135,13 @@ export function CampaignReportCard() {
           loading={loading && !report}
         />
 
-        {report?.daily && <CampaignDailyReportSection daily={report.daily} granularity={granularity} />}
+        {report?.daily && (
+          <CampaignDailyReportSection
+            daily={report.daily}
+            demographics={report.demographics}
+            granularity={granularity}
+          />
+        )}
       </CardContent>
     </Card>
   );
