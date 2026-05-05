@@ -1,3 +1,4 @@
+import { buildCacheKey, getOrSetJson } from "@/lib/cache/query-cache";
 import type {
   CampaignDailyEntry,
   CampaignDailyReport,
@@ -11,7 +12,7 @@ import type {
   DiffValue,
 } from "@/types/google-ads";
 
-import { getCustomer } from "./client";
+import { getCustomer, getCustomerId } from "./client";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -130,6 +131,17 @@ interface CampaignQueryResult {
 }
 
 async function queryCampaignSummary(rangeStart: string, rangeEnd: string): Promise<CampaignQueryResult> {
+  const cacheKey = buildCacheKey("report:summary", {
+    customerId: getCustomerId(),
+    rangeStart,
+    rangeEnd,
+  });
+  return getOrSetJson<CampaignQueryResult>(cacheKey, async () => {
+    return queryCampaignSummaryUncached(rangeStart, rangeEnd);
+  });
+}
+
+async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string): Promise<CampaignQueryResult> {
   const gaqlDateFilter = `segments.date BETWEEN '${rangeStart}' AND '${rangeEnd}'`;
   const customer = getCustomer();
   const rows = await customer.query(`
@@ -302,6 +314,17 @@ interface DailyContext {
 }
 
 async function getCampaignDailyReport(ctx: DailyContext): Promise<CampaignDailyReport> {
+  const { rangeStart, rangeEnd, periodLabel } = ctx;
+  const cacheKey = buildCacheKey("report:daily", {
+    customerId: getCustomerId(),
+    rangeStart,
+    rangeEnd,
+    periodLabel,
+  });
+  return getOrSetJson<CampaignDailyReport>(cacheKey, () => getCampaignDailyReportUncached(ctx));
+}
+
+async function getCampaignDailyReportUncached(ctx: DailyContext): Promise<CampaignDailyReport> {
   const { rangeStart, rangeEnd, periodLabel } = ctx;
   const gaqlDateFilter = `segments.date BETWEEN '${rangeStart}' AND '${rangeEnd}'`;
 

@@ -1,16 +1,14 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { getCustomer } from './client';
-import type {
-  DateRange,
-  SearchTermRow,
-  SearchTermsReport,
-} from '@/types/google-ads';
+import { buildCacheKey, getOrSetJson } from "@/lib/cache/query-cache";
+import type { DateRange, SearchTermRow, SearchTermsReport } from "@/types/google-ads";
+
+import { getCustomer, getCustomerId } from "./client";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 function formatYmd(d: Date): string {
   const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
@@ -20,12 +18,29 @@ export interface RunSearchTermsOptions {
   saveToPath?: string | null;
 }
 
-export async function runSearchTermsReport(
-  options: RunSearchTermsOptions = {},
-): Promise<SearchTermsReport> {
+export async function runSearchTermsReport(options: RunSearchTermsOptions = {}): Promise<SearchTermsReport> {
   const monthsBack = Math.max(1, Math.floor(options.monthsBack ?? 3));
   const campaignFilter = options.campaign?.trim() || null;
 
+  const cacheKey = buildCacheKey("search-terms", {
+    customerId: getCustomerId(),
+    monthsBack,
+    campaignFilter,
+  });
+
+  const result = await getOrSetJson<SearchTermsReport>(cacheKey, () =>
+    fetchSearchTermsReport(monthsBack, campaignFilter),
+  );
+
+  if (options.saveToPath) {
+    await mkdir(dirname(options.saveToPath), { recursive: true });
+    await writeFile(options.saveToPath, JSON.stringify(result, null, 2), "utf8");
+  }
+
+  return result;
+}
+
+async function fetchSearchTermsReport(monthsBack: number, campaignFilter: string | null): Promise<SearchTermsReport> {
   const end = new Date();
   const start = new Date(end);
   start.setMonth(start.getMonth() - monthsBack);
@@ -58,10 +73,10 @@ export async function runSearchTermsReport(
     const m = r.metrics ?? {};
     const costMicros = Number(m.cost_micros ?? 0);
     return {
-      searchTerm: String(r.search_term_view?.search_term ?? ''),
-      status: String(r.search_term_view?.status ?? ''),
-      campaign: String(r.campaign?.name ?? ''),
-      adGroup: String(r.ad_group?.name ?? ''),
+      searchTerm: String(r.search_term_view?.search_term ?? ""),
+      status: String(r.search_term_view?.status ?? ""),
+      campaign: String(r.campaign?.name ?? ""),
+      adGroup: String(r.ad_group?.name ?? ""),
       clicks: Number(m.clicks ?? 0),
       impressions: Number(m.impressions ?? 0),
       ctr: Number(m.ctr ?? 0),
@@ -74,7 +89,7 @@ export async function runSearchTermsReport(
   const totalImpressions = rows.reduce((s, r) => s + r.impressions, 0);
   const totalCost = rows.reduce((s, r) => s + r.costMicros, 0) / 1_000_000;
 
-  const result: SearchTermsReport = {
+  return {
     generatedAt: new Date().toISOString(),
     dateRange,
     campaignFilter,
@@ -87,21 +102,6 @@ export async function runSearchTermsReport(
       totalCost,
     },
   };
-
-  if (options.saveToPath) {
-    await mkdir(dirname(options.saveToPath), { recursive: true });
-    await writeFile(
-      options.saveToPath,
-      JSON.stringify(result, null, 2),
-      'utf8',
-    );
-  }
-
-  return result;
 }
 
-export const DEFAULT_SEARCH_TERMS_OUTPUT = join(
-  process.cwd(),
-  'data',
-  'output.json',
-);
+export const DEFAULT_SEARCH_TERMS_OUTPUT = join(process.cwd(), "data", "output.json");

@@ -1,8 +1,7 @@
-import { getCustomer } from './client';
-import type {
-  CampaignKeywordRow,
-  CampaignKeywordsReport,
-} from '@/types/google-ads';
+import { buildCacheKey, getOrSetJson } from "@/lib/cache/query-cache";
+import type { CampaignKeywordRow, CampaignKeywordsReport } from "@/types/google-ads";
+
+import { getCustomer, getCustomerId } from "./client";
 
 export interface CampaignKeywordsOptions {
   campaignId?: string | number | null;
@@ -10,16 +9,31 @@ export interface CampaignKeywordsOptions {
 }
 
 const escapeGaqlString = (s: unknown): string =>
-  String(s ?? '').replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+  String(s ?? "")
+    .replaceAll("\\", "\\\\")
+    .replaceAll("'", "\\'");
 
-export async function runCampaignKeywords(
-  options: CampaignKeywordsOptions,
-): Promise<CampaignKeywordsReport> {
+export async function runCampaignKeywords(options: CampaignKeywordsOptions): Promise<CampaignKeywordsReport> {
   const { campaignId, campaignName } = options;
   if (!campaignId && !campaignName) {
-    throw new Error('Provide either campaignId or campaignName');
+    throw new Error("Provide either campaignId or campaignName");
   }
 
+  const cacheKey = buildCacheKey("campaign-keywords", {
+    customerId: getCustomerId(),
+    campaignId: campaignId != null ? String(campaignId) : null,
+    campaignName: campaignName ?? null,
+  });
+
+  return getOrSetJson<CampaignKeywordsReport>(cacheKey, () =>
+    fetchCampaignKeywords(campaignId ?? null, campaignName ?? null),
+  );
+}
+
+async function fetchCampaignKeywords(
+  campaignId: string | number | null,
+  campaignName: string | null,
+): Promise<CampaignKeywordsReport> {
   const whereClause = campaignId
     ? `WHERE campaign.id = ${Number(campaignId)}`
     : `WHERE campaign.name LIKE '%${escapeGaqlString(campaignName)}%'`;
@@ -60,26 +74,26 @@ export async function runCampaignKeywords(
   ]);
 
   const adGroupKeywords: CampaignKeywordRow[] = adGroupRows.map((r) => ({
-    level: 'ad_group',
-    campaignId: String(r.campaign?.id ?? ''),
-    campaign: String(r.campaign?.name ?? ''),
-    adGroup: String(r.ad_group?.name ?? ''),
-    criterionId: String(r.ad_group_criterion?.criterion_id ?? ''),
+    level: "ad_group",
+    campaignId: String(r.campaign?.id ?? ""),
+    campaign: String(r.campaign?.name ?? ""),
+    adGroup: String(r.ad_group?.name ?? ""),
+    criterionId: String(r.ad_group_criterion?.criterion_id ?? ""),
     negative: Boolean(r.ad_group_criterion?.negative),
-    keyword: String(r.ad_group_criterion?.keyword?.text ?? ''),
-    matchType: r.ad_group_criterion?.keyword?.match_type ?? '',
+    keyword: String(r.ad_group_criterion?.keyword?.text ?? ""),
+    matchType: r.ad_group_criterion?.keyword?.match_type ?? "",
     status: r.ad_group_criterion?.status ?? null,
   }));
 
   const campaignNegatives: CampaignKeywordRow[] = campaignNegRows.map((r) => ({
-    level: 'campaign',
-    campaignId: String(r.campaign?.id ?? ''),
-    campaign: String(r.campaign?.name ?? ''),
+    level: "campaign",
+    campaignId: String(r.campaign?.id ?? ""),
+    campaign: String(r.campaign?.name ?? ""),
     adGroup: null,
-    criterionId: String(r.campaign_criterion?.criterion_id ?? ''),
+    criterionId: String(r.campaign_criterion?.criterion_id ?? ""),
     negative: true,
-    keyword: String(r.campaign_criterion?.keyword?.text ?? ''),
-    matchType: r.campaign_criterion?.keyword?.match_type ?? '',
+    keyword: String(r.campaign_criterion?.keyword?.text ?? ""),
+    matchType: r.campaign_criterion?.keyword?.match_type ?? "",
     status: null,
   }));
 
