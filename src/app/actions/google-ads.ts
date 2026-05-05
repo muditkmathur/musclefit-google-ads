@@ -1,24 +1,28 @@
-'use server';
+"use server";
 
-import { runCampaignReport } from '@/lib/google-ads/report';
-import { runSearchTermsReport } from '@/lib/google-ads/search-terms';
-import { analyzeNgrams } from '@/lib/google-ads/ngram-analysis';
-import { runCampaignKeywords } from '@/lib/google-ads/campaign-keywords';
+import { runCampaignKeywords } from "@/lib/google-ads/campaign-keywords";
+import { analyzeNgrams } from "@/lib/google-ads/ngram-analysis";
+import { runCampaignReport } from "@/lib/google-ads/report";
+import { runSearchTermsReport } from "@/lib/google-ads/search-terms";
 import type {
+  CampaignGranularity,
   CampaignKeywordsReport,
+  CampaignRangeKey,
   CampaignReport,
   NgramAnalysisOptions,
   NgramAnalysisResult,
   SearchTermRow,
   SearchTermsReport,
-} from '@/types/google-ads';
+} from "@/types/google-ads";
 
-export type ActionResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
+const VALID_RANGES: readonly CampaignRangeKey[] = ["last-7-days", "last-4-weeks", "last-3-months", "year-to-date"];
+
+const VALID_GRANULARITIES: readonly CampaignGranularity[] = ["day", "week", "month"];
+
+export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 function toError(err: unknown): string {
-  return err instanceof Error ? err.message : 'Unknown error';
+  return err instanceof Error ? err.message : "Unknown error";
 }
 
 export interface SearchTermsActionInput {
@@ -43,19 +47,25 @@ export async function getSearchTermsReport(
 }
 
 export interface CampaignReportActionInput {
-  days?: number;
-  includeDaily?: boolean;
+  range?: CampaignRangeKey;
+  granularity?: CampaignGranularity;
   saveToDisk?: boolean;
 }
 
-export async function getCampaignReport(
-  input: CampaignReportActionInput = {},
-): Promise<ActionResult<CampaignReport>> {
+export async function getCampaignReport(input: CampaignReportActionInput = {}): Promise<ActionResult<CampaignReport>> {
   try {
-    const days = Number(input.days);
+    const range: CampaignRangeKey = VALID_RANGES.includes(input.range as CampaignRangeKey)
+      ? (input.range as CampaignRangeKey)
+      : "last-4-weeks";
+    const granularity: CampaignGranularity = VALID_GRANULARITIES.includes(input.granularity as CampaignGranularity)
+      ? (input.granularity as CampaignGranularity)
+      : "day";
+
     const data = await runCampaignReport({
-      days: Number.isFinite(days) && days > 0 ? days : 30,
-      includeDaily: Boolean(input.includeDaily),
+      range,
+      granularity,
+      includeDaily: true,
+      includePrevious: true,
       saveToDisk: Boolean(input.saveToDisk),
     });
     return { ok: true, data };
@@ -100,7 +110,7 @@ export async function analyzeNgramsFromRows(
 ): Promise<ActionResult<NgramAnalysisResult>> {
   try {
     if (!Array.isArray(input?.rows)) {
-      return { ok: false, error: 'rows must be a SearchTermRow[]' };
+      return { ok: false, error: "rows must be a SearchTermRow[]" };
     }
     const data = analyzeNgrams({
       rows: input.rows,
@@ -126,7 +136,7 @@ export async function getCampaignKeywords(
     if (!campaignId && !campaignName) {
       return {
         ok: false,
-        error: 'Provide campaignId or campaignName',
+        error: "Provide campaignId or campaignName",
       };
     }
     const data = await runCampaignKeywords({ campaignId, campaignName });

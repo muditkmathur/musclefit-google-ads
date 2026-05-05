@@ -5,7 +5,7 @@ export interface DateRange {
 
 export interface DiffValue {
   delta: number;
-  direction: 'up' | 'down' | 'flat';
+  direction: "up" | "down" | "flat";
 }
 
 export interface CampaignSummaryRow {
@@ -21,23 +21,42 @@ export interface CampaignSummaryRow {
 }
 
 export interface CampaignTotals {
-  campaign: 'TOTAL';
-  status: '—';
+  campaign: "TOTAL";
+  status: "—";
   impressions: number;
   clicks: number;
   ctr: string;
-  avg_cpc: '—';
+  avg_cpc: "—";
   spend: string;
   conversions: number;
   cpa: string;
 }
 
+export interface CampaignTotalsRaw {
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  spend: number;
+  conversions: number;
+  cpa: number;
+}
+
+export type CampaignRangeKey = "last-7-days" | "last-4-weeks" | "last-3-months" | "year-to-date";
+
+export type CampaignGranularity = "day" | "week" | "month";
+
 export interface CampaignReport {
   generated_at: string;
   period: string;
+  range: CampaignRangeKey;
+  granularity: CampaignGranularity;
   date_range: DateRange;
+  previous_date_range: DateRange;
   campaigns: CampaignSummaryRow[];
   totals: CampaignTotals;
+  totals_raw: CampaignTotalsRaw;
+  previous_totals: CampaignTotals;
+  previous_totals_raw: CampaignTotalsRaw;
   daily?: CampaignDailyReport;
   saved_to?: { summary: string; daily?: string };
 }
@@ -109,13 +128,13 @@ export interface NgramAnalysisOptions {
   minTokenLen?: number;
   keepNumbers?: boolean;
   keepStopwords?: boolean;
-  weight?: 'count' | 'clicks' | 'impressions' | 'cost';
+  weight?: "count" | "clicks" | "impressions" | "cost";
   campaign?: string | null;
 }
 
 export interface NgramAnalysisResult {
   generatedAt: string;
-  weight: NonNullable<NgramAnalysisOptions['weight']>;
+  weight: NonNullable<NgramAnalysisOptions["weight"]>;
   campaign: string | null;
   params: {
     n: number[];
@@ -133,7 +152,7 @@ export interface NgramAnalysisResult {
 }
 
 export interface CampaignKeywordRow {
-  level: 'ad_group' | 'campaign';
+  level: "ad_group" | "campaign";
   campaignId: string | number;
   campaign: string;
   adGroup: string | null;

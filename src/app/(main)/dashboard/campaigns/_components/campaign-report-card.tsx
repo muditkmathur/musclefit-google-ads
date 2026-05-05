@@ -1,33 +1,52 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+import { RefreshCw } from "lucide-react";
 
 import { getCampaignReport } from "@/app/actions/google-ads";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
-import type { CampaignReport } from "@/types/google-ads";
+import type { CampaignGranularity, CampaignRangeKey, CampaignReport } from "@/types/google-ads";
 
 import { CampaignDailyReportSection } from "./campaign-daily-report";
+import { CampaignKpiStrip } from "./campaign-kpi-strip";
+
+const RANGE_OPTIONS: ReadonlyArray<{ value: CampaignRangeKey; label: string }> = [
+  { value: "last-7-days", label: "Last 7 days" },
+  { value: "last-4-weeks", label: "Last 4 weeks" },
+  { value: "last-3-months", label: "Last 3 months" },
+  { value: "year-to-date", label: "Year to date" },
+];
+
+const GRANULARITY_OPTIONS: ReadonlyArray<{ value: CampaignGranularity; label: string }> = [
+  { value: "day", label: "Day" },
+  { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
+];
+
+function rangeLabel(range: CampaignRangeKey): string {
+  return RANGE_OPTIONS.find((o) => o.value === range)?.label ?? "Selected period";
+}
 
 export function CampaignReportCard() {
-  const [days, setDays] = useState<number>(30);
-  const [includeDaily, setIncludeDaily] = useState(false);
+  const [range, setRange] = useState<CampaignRangeKey>("last-4-weeks");
+  const [granularity, setGranularity] = useState<CampaignGranularity>("day");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<CampaignReport | null>(null);
 
-  async function run() {
+  const fetchReport = useCallback(async (selectedRange: CampaignRangeKey, selectedGranularity: CampaignGranularity) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await getCampaignReport({ days, includeDaily });
+      const result = await getCampaignReport({
+        range: selectedRange,
+        granularity: selectedGranularity,
+      });
       if (!result.ok) throw new Error(result.error);
       setReport(result.data);
     } catch (err) {
@@ -35,7 +54,13 @@ export function CampaignReportCard() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    void fetchReport(range, granularity);
+  }, [fetchReport, range, granularity]);
+
+  const currentLabel = rangeLabel(range);
 
   return (
     <Card>
@@ -43,34 +68,56 @@ export function CampaignReportCard() {
         <CardTitle>Campaign report</CardTitle>
         <CardDescription>Active campaign performance over the selected window.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
-          <div className="space-y-1.5 sm:w-32">
-            <Label htmlFor="cr-days">Days</Label>
-            <Input
-              id="cr-days"
-              type="number"
-              min={1}
-              max={365}
-              value={days}
-              onChange={(e) => setDays(Number(e.target.value) || 30)}
-            />
-          </div>
+      <CardContent className="space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="flex items-center gap-2">
-            <Switch id="cr-daily" checked={includeDaily} onCheckedChange={setIncludeDaily} />
-            <Label htmlFor="cr-daily" className="font-normal text-sm">
-              Include daily DoD
-            </Label>
+            <Select value={range} onValueChange={(v) => setRange(v as CampaignRangeKey)}>
+              <SelectTrigger className="w-36" aria-label="Date range">
+                <SelectValue placeholder="Range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {RANGE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+
+            <Select value={granularity} onValueChange={(v) => setGranularity(v as CampaignGranularity)}>
+              <SelectTrigger className="w-28" aria-label="Granularity">
+                <SelectValue placeholder="Granularity" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {GRANULARITY_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </div>
-          <Button type="button" onClick={run} disabled={loading} className="sm:ml-auto">
-            {loading ? (
-              <>
-                <Spinner className="mr-2" />
-                Running…
-              </>
-            ) : (
-              "Run report"
-            )}
+
+          {report && !loading && (
+            <p className="text-muted-foreground text-sm sm:ml-2">
+              {report.date_range.start} → {report.date_range.end} · {report.campaigns.length} campaigns
+            </p>
+          )}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => void fetchReport(range, granularity)}
+            disabled={loading}
+            className="sm:ml-auto"
+            aria-label="Refresh report"
+          >
+            {loading ? <Spinner /> : <RefreshCw />}
           </Button>
         </div>
 
@@ -81,60 +128,14 @@ export function CampaignReportCard() {
           </Alert>
         )}
 
-        {report && (
-          <div>
-            <p className="mb-2 text-muted-foreground text-sm">
-              {report.period} ({report.date_range.start} → {report.date_range.end}) · {report.campaigns.length}{" "}
-              campaigns
-            </p>
-            <div className="rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Campaign</TableHead>
-                    <TableHead className="text-right">Impr.</TableHead>
-                    <TableHead className="text-right">Clicks</TableHead>
-                    <TableHead className="text-right">CTR</TableHead>
-                    <TableHead className="text-right">Avg. CPC</TableHead>
-                    <TableHead className="text-right">Spend</TableHead>
-                    <TableHead className="text-right">Conv.</TableHead>
-                    <TableHead className="text-right">CPA</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {report.campaigns.map((c) => (
-                    <TableRow key={c.campaign}>
-                      <TableCell className="font-medium">{c.campaign}</TableCell>
-                      <TableCell className="text-right">{c.impressions.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">{c.clicks.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">{c.ctr}</TableCell>
-                      <TableCell className="text-right">{c.avg_cpc}</TableCell>
-                      <TableCell className="text-right">{c.spend}</TableCell>
-                      <TableCell className="text-right">{c.conversions}</TableCell>
-                      <TableCell className="text-right">{c.cpa}</TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow className={cn("bg-muted/50 font-medium")}>
-                    <TableCell>{report.totals.campaign}</TableCell>
-                    <TableCell className="text-right">{report.totals.impressions.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{report.totals.clicks.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{report.totals.ctr}</TableCell>
-                    <TableCell className="text-right">{report.totals.avg_cpc}</TableCell>
-                    <TableCell className="text-right">{report.totals.spend}</TableCell>
-                    <TableCell className="text-right">{report.totals.conversions}</TableCell>
-                    <TableCell className="text-right">{report.totals.cpa}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
+        <CampaignKpiStrip
+          totals={report?.totals_raw ?? null}
+          previousTotals={report?.previous_totals_raw ?? null}
+          rangeLabel={currentLabel}
+          loading={loading && !report}
+        />
 
-            {report.daily && (
-              <div className="mt-6">
-                <CampaignDailyReportSection daily={report.daily} />
-              </div>
-            )}
-          </div>
-        )}
+        {report?.daily && <CampaignDailyReportSection daily={report.daily} granularity={granularity} />}
       </CardContent>
     </Card>
   );
