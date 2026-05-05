@@ -2,8 +2,8 @@ import {
   DEFAULT_NGRAM_INPUT,
   DEFAULT_NGRAM_OUTPUT,
   runNgramAnalysisFromFile,
-} from '../lib/google-ads/ngram-analysis';
-import type { NgramAnalysisOptions } from '../types/google-ads';
+} from '../src/lib/google-ads/ngram-analysis';
+import type { NgramAnalysisOptions } from '../src/types/google-ads';
 
 interface CliArgs extends NgramAnalysisOptions {
   inputPath: string;

@@ -2,7 +2,7 @@ import 'dotenv/config';
 import {
   DEFAULT_SEARCH_TERMS_OUTPUT,
   runSearchTermsReport,
-} from '../lib/google-ads/search-terms';
+} from '../src/lib/google-ads/search-terms';
 
 async function main() {
   const campaignFilter = process.argv[2] ?? null;

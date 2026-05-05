@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { runCampaignKeywords } from '../lib/google-ads/campaign-keywords';
+import { runCampaignKeywords } from '../src/lib/google-ads/campaign-keywords';
 
 function getArg(argv: string[], key: string): string | null {
   const i = argv.indexOf(key);

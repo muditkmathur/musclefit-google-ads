@@ -1,7 +1,23 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  serverExternalPackages: ['google-ads-api'],
+  reactCompiler: true,
+  compiler: {
+    removeConsole: process.env.NODE_ENV === "production",
+  },
+  async redirects() {
+    return [
+      {
+        source: "/dashboard",
+        destination: "/dashboard/campaigns",
+        permanent: false,
+      },
+      {
+        source: "/dashboard/google-ads",
+        destination: "/dashboard/campaigns",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

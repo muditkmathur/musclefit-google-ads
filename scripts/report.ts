@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { runCampaignReport } from '../lib/google-ads/report';
+import { runCampaignReport } from '../src/lib/google-ads/report';
 
 async function main() {
   const args = process.argv.slice(2);
