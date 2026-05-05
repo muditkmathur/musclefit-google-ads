@@ -776,6 +776,7 @@ function DemographicsView({ demographics, granularity }: DemographicsViewProps) 
   const [metricKey, setMetricKey] = useState<MetricKey>("spend");
   const [chartType, setChartType] = useState<ChartType>("line");
   const [selected, setSelected] = useState<string>(ALL_CAMPAIGNS_VALUE);
+  const [hiddenBucketKeys, setHiddenBucketKeys] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (selected === ALL_CAMPAIGNS_VALUE) return;
@@ -795,6 +796,26 @@ function DemographicsView({ demographics, granularity }: DemographicsViewProps) 
 
   const buckets = useMemo(() => slice?.buckets ?? [], [slice]);
 
+  // Reset hidden buckets when the underlying slice changes (different dimension or campaign scope)
+  // so stale keys from a previous selection do not silently keep series hidden.
+  useEffect(() => {
+    setHiddenBucketKeys((prev) => (prev.size === 0 ? prev : new Set()));
+  }, []);
+
+  const visibleBuckets = useMemo(
+    () => buckets.filter((b) => !hiddenBucketKeys.has(b.key)),
+    [buckets, hiddenBucketKeys],
+  );
+
+  const toggleBucket = (key: string) => {
+    setHiddenBucketKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   const bucketColor = useMemo(() => {
     const map: Record<string, string> = {};
     buckets.forEach((b, idx) => {
@@ -812,16 +833,16 @@ function DemographicsView({ demographics, granularity }: DemographicsViewProps) 
     () =>
       datums.map((d) => {
         const row: DemographicsChartRow = { bucket: d.bucket, label: d.label };
-        for (const b of buckets) {
+        for (const b of visibleBuckets) {
           row[b.key] = d.values[b.key] ?? 0;
         }
         return row;
       }),
-    [datums, buckets],
+    [datums, visibleBuckets],
   );
 
   const summaryStats = useMemo(() => {
-    return buckets.map((b) => {
+    return visibleBuckets.map((b) => {
       const values = datums.map((d) => d.values[b.key] ?? 0);
       const total =
         metric.aggregation === "sum"
@@ -831,15 +852,15 @@ function DemographicsView({ demographics, granularity }: DemographicsViewProps) 
             : 0;
       return { bucket: b, value: total };
     });
-  }, [buckets, datums, metric.aggregation]);
+  }, [visibleBuckets, datums, metric.aggregation]);
 
   const axisAssignment = useMemo(
     () =>
       computeAxisAssignmentForSingleUnit(
         metric.unit,
-        buckets.map((b) => b.key),
+        visibleBuckets.map((b) => b.key),
       ),
-    [metric.unit, buckets],
+    [metric.unit, visibleBuckets],
   );
 
   const chartConfig = useMemo<ChartConfig>(() => {
@@ -851,10 +872,13 @@ function DemographicsView({ demographics, granularity }: DemographicsViewProps) 
   }, [buckets, bucketColor]);
 
   const scopeLabel = isAllCampaigns ? `All campaigns (${demographics.campaigns.length})` : selected;
-  const showChart = buckets.length > 0 && datums.length > 0;
+  const hasData = buckets.length > 0 && datums.length > 0;
+  const allHidden = hasData && visibleBuckets.length === 0;
+  const showChart = hasData && !allHidden;
 
   const tooltipFormatter = (value: unknown, name: unknown) => {
     const bucketKeyName = String(name);
+    if (hiddenBucketKeys.has(bucketKeyName)) return null;
     const found = buckets.find((b) => b.key === bucketKeyName);
     return (
       <div className="flex w-full items-center justify-between gap-3">
@@ -960,7 +984,7 @@ function DemographicsView({ demographics, granularity }: DemographicsViewProps) 
         </ToggleGroup>
       )}
 
-      {showChart ? (
+      {hasData ? (
         <div className="rounded-lg border bg-card p-4">
           <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
             <div>
@@ -987,101 +1011,156 @@ function DemographicsView({ demographics, granularity }: DemographicsViewProps) 
               ))}
             </div>
           </div>
-          <ChartContainer config={chartConfig} className="h-64 w-full">
-            {chartType === "bar" ? (
-              <BarChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }} barCategoryGap={6}>
-                <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  fontSize={11}
-                  interval="preserveStartEnd"
-                />
-                {axisAssignment.descriptors.map((descriptor) => (
-                  <YAxis
-                    key={descriptor.id}
-                    yAxisId={descriptor.id}
-                    orientation={descriptor.orientation}
+          {showChart ? (
+            <ChartContainer config={chartConfig} className="h-64 w-full">
+              {chartType === "bar" ? (
+                <BarChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }} barCategoryGap={6}>
+                  <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="label"
                     tickLine={false}
                     axisLine={false}
-                    tickMargin={4}
-                    fontSize={10}
-                    width={descriptor.visible ? descriptor.width : 0}
-                    hide={!descriptor.visible}
-                    tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
+                    tickMargin={8}
+                    fontSize={11}
+                    interval="preserveStartEnd"
                   />
-                ))}
-                <ChartTooltip
-                  cursor={{ fill: "var(--muted)", fillOpacity: 0.4 }}
-                  content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
-                />
-                <ChartLegend content={<ChartLegendContent />} />
-                {buckets.map((b) => (
-                  <Bar
-                    key={b.key}
-                    yAxisId={axisAssignment.metricToAxis[b.key]}
-                    dataKey={b.key}
-                    name={b.key}
-                    fill={bucketColor[b.key]}
-                    fillOpacity={0.9}
-                    radius={[2, 2, 0, 0]}
+                  {axisAssignment.descriptors.map((descriptor) => (
+                    <YAxis
+                      key={descriptor.id}
+                      yAxisId={descriptor.id}
+                      orientation={descriptor.orientation}
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={4}
+                      fontSize={10}
+                      width={descriptor.visible ? descriptor.width : 0}
+                      hide={!descriptor.visible}
+                      tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
+                    />
+                  ))}
+                  <ChartTooltip
+                    cursor={{ fill: "var(--muted)", fillOpacity: 0.4 }}
+                    content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
                   />
-                ))}
-              </BarChart>
-            ) : (
-              <LineChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }}>
-                <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  fontSize={11}
-                  interval="preserveStartEnd"
-                />
-                {axisAssignment.descriptors.map((descriptor) => (
-                  <YAxis
-                    key={descriptor.id}
-                    yAxisId={descriptor.id}
-                    orientation={descriptor.orientation}
+                  {visibleBuckets.map((b) => (
+                    <Bar
+                      key={b.key}
+                      yAxisId={axisAssignment.metricToAxis[b.key]}
+                      dataKey={b.key}
+                      name={b.key}
+                      fill={bucketColor[b.key]}
+                      fillOpacity={0.9}
+                      radius={[2, 2, 0, 0]}
+                    />
+                  ))}
+                </BarChart>
+              ) : (
+                <LineChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }}>
+                  <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="label"
                     tickLine={false}
                     axisLine={false}
-                    tickMargin={4}
-                    fontSize={10}
-                    width={descriptor.visible ? descriptor.width : 0}
-                    hide={!descriptor.visible}
-                    tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
+                    tickMargin={8}
+                    fontSize={11}
+                    interval="preserveStartEnd"
                   />
-                ))}
-                <ChartTooltip
-                  cursor={{ stroke: "var(--border)" }}
-                  content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
-                />
-                <ChartLegend content={<ChartLegendContent />} />
-                {buckets.map((b) => (
-                  <Line
-                    key={b.key}
-                    yAxisId={axisAssignment.metricToAxis[b.key]}
-                    type="monotone"
-                    dataKey={b.key}
-                    name={b.key}
-                    stroke={bucketColor[b.key]}
-                    strokeWidth={2}
-                    dot={{ r: 3, strokeWidth: 0, fill: bucketColor[b.key] }}
-                    activeDot={{ r: 5, strokeWidth: 0 }}
+                  {axisAssignment.descriptors.map((descriptor) => (
+                    <YAxis
+                      key={descriptor.id}
+                      yAxisId={descriptor.id}
+                      orientation={descriptor.orientation}
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={4}
+                      fontSize={10}
+                      width={descriptor.visible ? descriptor.width : 0}
+                      hide={!descriptor.visible}
+                      tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
+                    />
+                  ))}
+                  <ChartTooltip
+                    cursor={{ stroke: "var(--border)" }}
+                    content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
                   />
-                ))}
-              </LineChart>
-            )}
-          </ChartContainer>
+                  {visibleBuckets.map((b) => (
+                    <Line
+                      key={b.key}
+                      yAxisId={axisAssignment.metricToAxis[b.key]}
+                      type="monotone"
+                      dataKey={b.key}
+                      name={b.key}
+                      stroke={bucketColor[b.key]}
+                      strokeWidth={2}
+                      dot={{ r: 3, strokeWidth: 0, fill: bucketColor[b.key] }}
+                      activeDot={{ r: 5, strokeWidth: 0 }}
+                    />
+                  ))}
+                </LineChart>
+              )}
+            </ChartContainer>
+          ) : (
+            <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-border border-dashed text-muted-foreground text-sm">
+              <span>All buckets hidden. Select at least one in the legend below.</span>
+            </div>
+          )}
+          <DemographicBucketLegend
+            buckets={buckets}
+            hidden={hiddenBucketKeys}
+            colorByKey={bucketColor}
+            onToggle={toggleBucket}
+          />
         </div>
       ) : (
         <div className="flex h-32 items-center justify-center rounded-lg border border-border border-dashed text-muted-foreground text-sm">
           No demographic data for this selection.
         </div>
       )}
+    </div>
+  );
+}
+
+interface DemographicBucketLegendProps {
+  buckets: ReadonlyArray<{ key: string; label: string }>;
+  hidden: ReadonlySet<string>;
+  colorByKey: Record<string, string>;
+  onToggle: (key: string) => void;
+}
+
+/**
+ * Clickable legend rendered below the demographics chart. Each bucket is a button that
+ * toggles its visibility. Hidden buckets stay listed in a muted style so they can be
+ * restored. The legend is the source of truth for which series are drawn.
+ */
+function DemographicBucketLegend({ buckets, hidden, colorByKey, onToggle }: DemographicBucketLegendProps) {
+  if (buckets.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 pt-3">
+      {buckets.map((b) => {
+        const isOff = hidden.has(b.key);
+        return (
+          <button
+            key={b.key}
+            type="button"
+            onClick={() => onToggle(b.key)}
+            aria-pressed={!isOff}
+            title={isOff ? `Show ${b.label}` : `Hide ${b.label}`}
+            className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${
+              isOff ? "border-dashed text-muted-foreground opacity-60" : "border-transparent"
+            }`}
+          >
+            <span
+              aria-hidden
+              className="size-2 rounded-[2px]"
+              style={{
+                backgroundColor: isOff ? "transparent" : colorByKey[b.key],
+                outline: isOff ? `1.5px dashed ${colorByKey[b.key] ?? "currentColor"}` : "none",
+              }}
+            />
+            <span className={isOff ? "line-through" : ""}>{b.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
