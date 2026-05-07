@@ -1,7 +1,3 @@
-import Link from "next/link";
-
-import { Badge } from "@/components/ui/badge";
-
 import { CampaignReportCard } from "./_components/campaign-report-card";
 
 export default function CampaignsPage() {

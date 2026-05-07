@@ -38,7 +38,7 @@ async function fetchCampaignKeywords(
     ? `WHERE campaign.id = ${Number(campaignId)}`
     : `WHERE campaign.name LIKE '%${escapeGaqlString(campaignName)}%'`;
 
-  const customer = getCustomer();
+  const customer = await getCustomer();
 
   const [adGroupRows, campaignNegRows] = await Promise.all([
     customer.query(`

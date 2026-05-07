@@ -15,13 +15,58 @@ import type {
   SearchTermsReport,
 } from "@/types/google-ads";
 
-const VALID_RANGES: readonly CampaignRangeKey[] = ["last-7-days", "last-4-weeks", "last-3-months", "year-to-date"];
+const VALID_RANGES: readonly CampaignRangeKey[] = [
+  "last-7-days",
+  "last-4-weeks",
+  "last-3-months",
+  "year-to-date",
+];
 
-const VALID_GRANULARITIES: readonly CampaignGranularity[] = ["day", "week", "month"];
+const VALID_GRANULARITIES: readonly CampaignGranularity[] = [
+  "day",
+  "week",
+  "month",
+];
 
-export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
+export type ActionResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: string };
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function oauthErrorFromUnknown(err: unknown): { code?: string; description?: string } {
+  const errorObj = asRecord(err);
+  const response = asRecord(errorObj?.response);
+  const data = asRecord(response?.data);
+  const code = typeof data?.error === "string" ? data.error : undefined;
+  const description =
+    typeof data?.error_description === "string" ? data.error_description : undefined;
+  return { code, description };
+}
+
+function normalizeGoogleAdsError(err: unknown): string | null {
+  const { code, description } = oauthErrorFromUnknown(err);
+  const rawMessage = err instanceof Error ? err.message : "";
+  const combined = `${code ?? ""} ${description ?? ""} ${rawMessage}`.toLowerCase();
+
+  if (combined.includes("invalid_grant")) {
+    return "Google Ads authentication failed: the refresh token is expired or revoked. Reconnect the Google Ads OAuth app and update GOOGLE_ADS_REFRESH_TOKEN in your environment.";
+  }
+
+  if (combined.includes("missing required env var: google_ads_")) {
+    return rawMessage;
+  }
+
+  return null;
+}
 
 function toError(err: unknown): string {
+  const normalized = normalizeGoogleAdsError(err);
+  if (normalized) return normalized;
   return err instanceof Error ? err.message : "Unknown error";
 }
 
@@ -42,6 +87,7 @@ export async function getSearchTermsReport(
     });
     return { ok: true, data };
   } catch (err) {
+    console.error(err);
     return { ok: false, error: toError(err) };
   }
 }
@@ -52,12 +98,18 @@ export interface CampaignReportActionInput {
   saveToDisk?: boolean;
 }
 
-export async function getCampaignReport(input: CampaignReportActionInput = {}): Promise<ActionResult<CampaignReport>> {
+export async function getCampaignReport(
+  input: CampaignReportActionInput = {},
+): Promise<ActionResult<CampaignReport>> {
   try {
-    const range: CampaignRangeKey = VALID_RANGES.includes(input.range as CampaignRangeKey)
+    const range: CampaignRangeKey = VALID_RANGES.includes(
+      input.range as CampaignRangeKey,
+    )
       ? (input.range as CampaignRangeKey)
       : "last-4-weeks";
-    const granularity: CampaignGranularity = VALID_GRANULARITIES.includes(input.granularity as CampaignGranularity)
+    const granularity: CampaignGranularity = VALID_GRANULARITIES.includes(
+      input.granularity as CampaignGranularity,
+    )
       ? (input.granularity as CampaignGranularity)
       : "day";
 
@@ -71,6 +123,7 @@ export async function getCampaignReport(input: CampaignReportActionInput = {}): 
     });
     return { ok: true, data };
   } catch (err) {
+    console.error(err);
     return { ok: false, error: toError(err) };
   }
 }
@@ -97,6 +150,7 @@ export async function getNgramAnalysis(
     });
     return { ok: true, data };
   } catch (err) {
+    console.error(err);
     return { ok: false, error: toError(err) };
   }
 }
@@ -119,6 +173,7 @@ export async function analyzeNgramsFromRows(
     });
     return { ok: true, data };
   } catch (err) {
+    console.error(err);
     return { ok: false, error: toError(err) };
   }
 }
@@ -143,6 +198,7 @@ export async function getCampaignKeywords(
     const data = await runCampaignKeywords({ campaignId, campaignName });
     return { ok: true, data };
   } catch (err) {
+    console.error(err);
     return { ok: false, error: toError(err) };
   }
 }

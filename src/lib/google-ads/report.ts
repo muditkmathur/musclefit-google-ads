@@ -150,7 +150,7 @@ async function queryCampaignSummary(rangeStart: string, rangeEnd: string): Promi
 
 async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string): Promise<CampaignQueryResult> {
   const gaqlDateFilter = `segments.date BETWEEN '${rangeStart}' AND '${rangeEnd}'`;
-  const customer = getCustomer();
+  const customer = await getCustomer();
   const rows = await customer.query(`
     SELECT
       campaign.name,
@@ -363,7 +363,7 @@ async function getCampaignDailyReportUncached(ctx: DailyContext): Promise<Campai
   const { rangeStart, rangeEnd, periodLabel } = ctx;
   const gaqlDateFilter = `segments.date BETWEEN '${rangeStart}' AND '${rangeEnd}'`;
 
-  const customer = getCustomer();
+  const customer = await getCustomer();
   const rows = await customer.query(`
     SELECT
       segments.date,
@@ -636,7 +636,7 @@ async function queryDemographicView(
   rangeEnd: string,
   bucketField: "ad_group_criterion.age_range.type" | "ad_group_criterion.gender.type",
 ): Promise<RawDemographicRow[]> {
-  const customer = getCustomer();
+  const customer = await getCustomer();
   const rows = await customer.query(`
     SELECT
       segments.date,

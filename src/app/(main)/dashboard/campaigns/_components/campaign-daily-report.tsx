@@ -27,8 +27,59 @@ type MetricKey = "spend" | "impressions" | "clicks" | "conversions" | "ctr" | "a
 type UnitGroup = "count" | "currency" | "percent";
 type ChartType = "bar" | "line";
 type View = "daily" | "demographics";
+type DailyMode = "aggregate" | "single" | "compare";
+type DemographicsMode = "buckets" | "compare";
 
 const ALL_CAMPAIGNS_VALUE = "__all_campaigns__";
+
+const DAILY_MODES: ReadonlyArray<{ key: DailyMode; label: string; description: string }> = [
+  { key: "aggregate", label: "Cumulative", description: "All campaigns combined" },
+  { key: "single", label: "Single", description: "One campaign at a time" },
+  { key: "compare", label: "Compare", description: "One metric across campaigns" },
+];
+
+const DEMOGRAPHICS_MODES: ReadonlyArray<{ key: DemographicsMode; label: string; description: string }> = [
+  { key: "buckets", label: "Buckets", description: "Compare demographic buckets" },
+  { key: "compare", label: "Compare", description: "One bucket across campaigns" },
+];
+
+/**
+ * Stable color palette used for per-campaign series in compare mode. The palette is
+ * intentionally larger than the metric palette since accounts can have many campaigns,
+ * and adjacent hues are kept perceptually distinct so that overlapping line series stay
+ * legible.
+ */
+const CAMPAIGN_PALETTE = [
+  "#2563eb",
+  "#f97316",
+  "#16a34a",
+  "#9333ea",
+  "#db2777",
+  "#0d9488",
+  "#dc2626",
+  "#a16207",
+  "#0ea5e9",
+  "#7c3aed",
+  "#059669",
+  "#e11d48",
+  "#0891b2",
+  "#ca8a04",
+  "#65a30d",
+  "#9f1239",
+];
+
+/** Deterministic string hash used to pick a stable color slot for a campaign name. */
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+function colorForCampaign(name: string): string {
+  return CAMPAIGN_PALETTE[hashString(name) % CAMPAIGN_PALETTE.length];
+}
 
 interface MetricSpec {
   key: MetricKey;
@@ -234,7 +285,15 @@ type ChartRow = {
   label: string;
 } & Partial<Record<MetricKey, number>>;
 
-function aggregateAllMetrics(days: CampaignDailyEntry[], granularity: CampaignGranularity): BucketDatum[] {
+/**
+ * @param portfolioMode When true (all campaigns / "Cumulative" view), CTR in each time bucket is
+ *   (sum of clicks) / (sum of impressions) × 100. Otherwise CTR is the average of daily CTR samples in the bucket.
+ */
+function aggregateAllMetrics(
+  days: CampaignDailyEntry[],
+  granularity: CampaignGranularity,
+  portfolioMode = false,
+): BucketDatum[] {
   const map = new Map<string, BucketDatum>();
   for (const day of days) {
     const key = bucketKey(day.date, granularity);
@@ -245,6 +304,7 @@ function aggregateAllMetrics(days: CampaignDailyEntry[], granularity: CampaignGr
       count: 0,
     };
     for (const metric of METRICS) {
+      if (portfolioMode && metric.key === "ctr") continue;
       const raw = readMetric(day, metric.key);
       existing.values[metric.key] = (existing.values[metric.key] ?? 0) + raw;
     }
@@ -254,8 +314,61 @@ function aggregateAllMetrics(days: CampaignDailyEntry[], granularity: CampaignGr
   const list = Array.from(map.values()).sort((a, b) => a.bucket.localeCompare(b.bucket));
   for (const bucket of list) {
     for (const metric of METRICS) {
-      if (metric.aggregation === "avg" && bucket.count > 0) {
-        bucket.values[metric.key] = (bucket.values[metric.key] ?? 0) / bucket.count;
+      if (metric.aggregation !== "avg" || bucket.count === 0) continue;
+      if (portfolioMode && metric.key === "ctr") continue;
+      bucket.values[metric.key] = (bucket.values[metric.key] ?? 0) / bucket.count;
+    }
+    if (portfolioMode) {
+      const imps = bucket.values.impressions ?? 0;
+      const clicks = bucket.values.clicks ?? 0;
+      bucket.values.ctr = imps > 0 ? (clicks / imps) * 100 : 0;
+    }
+  }
+  return list;
+}
+
+interface CompareBucketDatum {
+  bucket: string;
+  label: string;
+  /** Per-campaign aggregated values for the chosen metric. */
+  values: Record<string, number>;
+  /** Per-campaign daily-row counts, used for averaging ratio metrics. */
+  counts: Record<string, number>;
+}
+
+/**
+ * Aggregate a single metric across multiple campaigns into shared buckets, producing
+ * one value per (bucket, campaign) pair. Sum/avg semantics mirror `aggregateAllMetrics`.
+ */
+function aggregateMetricByCampaign(
+  campaigns: ReadonlyArray<{ campaign: string; days: CampaignDailyEntry[] }>,
+  metric: MetricSpec,
+  granularity: CampaignGranularity,
+): CompareBucketDatum[] {
+  const map = new Map<string, CompareBucketDatum>();
+  for (const c of campaigns) {
+    for (const day of c.days) {
+      const key = bucketKey(day.date, granularity);
+      const existing =
+        map.get(key) ??
+        ({
+          bucket: key,
+          label: formatBucketLabel(key, granularity),
+          values: {},
+          counts: {},
+        } satisfies CompareBucketDatum);
+      const raw = readMetric(day, metric.key);
+      existing.values[c.campaign] = (existing.values[c.campaign] ?? 0) + raw;
+      existing.counts[c.campaign] = (existing.counts[c.campaign] ?? 0) + 1;
+      map.set(key, existing);
+    }
+  }
+  const list = Array.from(map.values()).sort((a, b) => a.bucket.localeCompare(b.bucket));
+  if (metric.aggregation === "avg") {
+    for (const datum of list) {
+      for (const name of Object.keys(datum.values)) {
+        const count = datum.counts[name] ?? 0;
+        if (count > 0) datum.values[name] = datum.values[name] / count;
       }
     }
   }
@@ -349,27 +462,96 @@ interface DailyViewProps {
 }
 
 function DailyView({ daily, granularity }: DailyViewProps) {
-  const [selected, setSelected] = useState<string>(ALL_CAMPAIGNS_VALUE);
-  const [metricKeys, setMetricKeys] = useState<MetricKey[]>(["spend", "impressions", "conversions"]);
+  const [mode, setMode] = useState<DailyMode>("aggregate");
   const [chartType, setChartType] = useState<ChartType>("line");
 
-  useEffect(() => {
-    if (selected === ALL_CAMPAIGNS_VALUE) return;
-    const exists = daily.campaigns.some((c) => c.campaign === selected);
-    if (!exists) {
-      setSelected(ALL_CAMPAIGNS_VALUE);
-    }
-  }, [daily, selected]);
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          spacing={1}
+          value={mode}
+          onValueChange={(v) => {
+            if (v === "aggregate" || v === "single" || v === "compare") setMode(v);
+          }}
+          aria-label="Daily breakdown mode"
+        >
+          {DAILY_MODES.map((m) => (
+            <ToggleGroupItem key={m.key} value={m.key} className="text-xs" title={m.description}>
+              {m.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
 
-  const isAllCampaigns = selected === ALL_CAMPAIGNS_VALUE;
-  const selectedCampaign = isAllCampaigns ? null : (daily.campaigns.find((c) => c.campaign === selected) ?? null);
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          spacing={1}
+          value={chartType}
+          onValueChange={(v) => {
+            if (v === "bar" || v === "line") setChartType(v);
+          }}
+          aria-label="Chart type"
+        >
+          <ToggleGroupItem value="bar" className="text-xs">
+            Bar
+          </ToggleGroupItem>
+          <ToggleGroupItem value="line" className="text-xs">
+            Line
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+
+      {mode === "compare" ? (
+        <CompareDailyView daily={daily} granularity={granularity} chartType={chartType} />
+      ) : (
+        <CombinedDailyView daily={daily} granularity={granularity} chartType={chartType} mode={mode} />
+      )}
+    </div>
+  );
+}
+
+interface CombinedDailyViewProps {
+  daily: CampaignDailyReport;
+  granularity: CampaignGranularity;
+  chartType: ChartType;
+  mode: "aggregate" | "single";
+}
+
+/**
+ * Renders the existing aggregate / single-campaign chart. In `aggregate` mode all
+ * campaigns are summed into one time series. In `single` mode one campaign is picked
+ * and only its daily rows are charted. Multiple metrics can be displayed at once
+ * (each gets its own y-axis to keep scales legible).
+ */
+function CombinedDailyView({ daily, granularity, chartType, mode }: CombinedDailyViewProps) {
+  const [selectedCampaign, setSelectedCampaign] = useState<string>("");
+  const [metricKeys, setMetricKeys] = useState<MetricKey[]>(["spend", "impressions", "conversions"]);
+
+  // In single mode, ensure there's a valid selection. Defaulting to the first campaign
+  // means switching from aggregate -> single does not silently render an empty chart.
+  useEffect(() => {
+    if (mode !== "single") return;
+    const exists = daily.campaigns.some((c) => c.campaign === selectedCampaign);
+    if (!exists) setSelectedCampaign(daily.campaigns[0]?.campaign ?? "");
+  }, [mode, daily, selectedCampaign]);
+
+  const isAggregate = mode === "aggregate";
+  const activeCampaign = isAggregate ? null : (daily.campaigns.find((c) => c.campaign === selectedCampaign) ?? null);
 
   const sourceDays = useMemo(() => {
-    if (isAllCampaigns) return daily.campaigns.flatMap((c) => c.days);
-    return selectedCampaign?.days ?? [];
-  }, [isAllCampaigns, daily, selectedCampaign]);
+    if (isAggregate) return daily.campaigns.flatMap((c) => c.days);
+    return activeCampaign?.days ?? [];
+  }, [isAggregate, daily, activeCampaign]);
 
-  const buckets = useMemo(() => aggregateAllMetrics(sourceDays, granularity), [sourceDays, granularity]);
+  const buckets = useMemo(
+    () => aggregateAllMetrics(sourceDays, granularity, isAggregate),
+    [sourceDays, granularity, isAggregate],
+  );
 
   const selectedMetrics = metricKeys.map((key) => METRIC_BY_KEY[key]);
 
@@ -408,9 +590,8 @@ function DailyView({ daily, granularity }: DailyViewProps) {
     return config;
   }, []);
 
-  const scopeLabel = isAllCampaigns ? `All campaigns (${daily.campaigns.length})` : (selectedCampaign?.campaign ?? "—");
-
-  const showChart = isAllCampaigns ? buckets.length > 0 : Boolean(selectedCampaign);
+  const scopeLabel = isAggregate ? `All campaigns (${daily.campaigns.length})` : (activeCampaign?.campaign ?? "—");
+  const showChart = isAggregate ? buckets.length > 0 : Boolean(activeCampaign);
 
   const tooltipFormatter = (value: unknown, name: unknown) => {
     const metric = METRIC_BY_KEY[name as MetricKey];
@@ -435,27 +616,6 @@ function DailyView({ daily, granularity }: DailyViewProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end">
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          spacing={1}
-          value={chartType}
-          onValueChange={(v) => {
-            if (v === "bar" || v === "line") setChartType(v);
-          }}
-          aria-label="Chart type"
-        >
-          <ToggleGroupItem value="bar" className="text-xs">
-            Bar
-          </ToggleGroupItem>
-          <ToggleGroupItem value="line" className="text-xs">
-            Line
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-
       <ToggleGroup
         type="multiple"
         variant="outline"
@@ -481,22 +641,19 @@ function DailyView({ daily, granularity }: DailyViewProps) {
         ))}
       </ToggleGroup>
 
-      {daily.campaigns.length > 0 && (
+      {!isAggregate && daily.campaigns.length > 0 && (
         <ToggleGroup
           type="single"
           variant="outline"
           size="sm"
           spacing={1}
-          value={selected}
+          value={selectedCampaign}
           onValueChange={(value) => {
-            if (value) setSelected(value);
+            if (value) setSelectedCampaign(value);
           }}
           className="flex-wrap"
-          aria-label="Filter daily breakdown by campaign"
+          aria-label="Pick a campaign to show"
         >
-          <ToggleGroupItem value={ALL_CAMPAIGNS_VALUE} className="text-xs">
-            All campaigns
-          </ToggleGroupItem>
           {daily.campaigns.map((c) => (
             <ToggleGroupItem key={c.campaign} value={c.campaign} className="text-xs">
               {c.campaign}
@@ -625,6 +782,360 @@ function DailyView({ daily, granularity }: DailyViewProps) {
   );
 }
 
+interface CompareDailyViewProps {
+  daily: CampaignDailyReport;
+  granularity: CampaignGranularity;
+  chartType: ChartType;
+}
+
+/**
+ * Compare-mode chart: one selected metric, one series per campaign across date buckets.
+ * All series share a single y-axis since they represent the same unit. The legend
+ * below the chart is the source of truth for which series are drawn — clicking an
+ * entry hides/shows that campaign's series.
+ */
+function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewProps) {
+  const [metricKey, setMetricKey] = useState<MetricKey>("spend");
+  const [hiddenCampaigns, setHiddenCampaigns] = useState<Set<string>>(() => new Set());
+
+  // Drop entries from the hidden set if a campaign is no longer present in the report
+  // so stale names don't silently keep series hidden after a refresh.
+  useEffect(() => {
+    setHiddenCampaigns((prev) => {
+      if (prev.size === 0) return prev;
+      const valid = new Set(daily.campaigns.map((c) => c.campaign));
+      const next = new Set<string>();
+      for (const name of prev) if (valid.has(name)) next.add(name);
+      return next.size === prev.size ? prev : next;
+    });
+  }, [daily]);
+
+  const metric = METRIC_BY_KEY[metricKey];
+  const allCampaigns = daily.campaigns;
+  const visibleCampaigns = useMemo(
+    () => allCampaigns.filter((c) => !hiddenCampaigns.has(c.campaign)),
+    [allCampaigns, hiddenCampaigns],
+  );
+
+  const datums = useMemo(
+    () => aggregateMetricByCampaign(allCampaigns, metric, granularity),
+    [allCampaigns, metric, granularity],
+  );
+
+  const campaignColor = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const c of allCampaigns) map[c.campaign] = colorForCampaign(c.campaign);
+    return map;
+  }, [allCampaigns]);
+
+  const chartData = useMemo(() => {
+    return datums.map((d) => {
+      const row: Record<string, number | string> = { bucket: d.bucket, label: d.label };
+      for (const c of visibleCampaigns) row[c.campaign] = d.values[c.campaign] ?? 0;
+      return row;
+    });
+  }, [datums, visibleCampaigns]);
+
+  const summaryStats = useMemo(() => {
+    return visibleCampaigns
+      .map((c) => {
+        const values = datums.map((d) => d.values[c.campaign] ?? 0);
+        const total =
+          metric.aggregation === "sum"
+            ? values.reduce((s, v) => s + v, 0)
+            : values.length > 0
+              ? values.reduce((s, v) => s + v, 0) / values.length
+              : 0;
+        return { campaign: c.campaign, value: total };
+      })
+      .sort((a, b) => b.value - a.value);
+  }, [visibleCampaigns, datums, metric.aggregation]);
+
+  const axisAssignment = useMemo(
+    () =>
+      computeAxisAssignmentForSingleUnit(
+        metric.unit,
+        visibleCampaigns.map((c) => c.campaign),
+      ),
+    [metric.unit, visibleCampaigns],
+  );
+
+  const chartConfig = useMemo<ChartConfig>(() => {
+    const config: ChartConfig = {};
+    for (const c of allCampaigns) config[c.campaign] = { color: campaignColor[c.campaign], label: c.campaign };
+    return config;
+  }, [allCampaigns, campaignColor]);
+
+  const toggleCampaign = (name: string) => {
+    setHiddenCampaigns((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const showAll = () => setHiddenCampaigns(new Set());
+  const hideAll = () => setHiddenCampaigns(new Set(allCampaigns.map((c) => c.campaign)));
+
+  const hasData = allCampaigns.length > 0 && datums.length > 0;
+  const allHidden = hasData && visibleCampaigns.length === 0;
+  const showChart = hasData && !allHidden;
+
+  const tooltipFormatter = (value: unknown, name: unknown) => {
+    const campaignName = String(name);
+    return (
+      <div className="flex w-full items-center justify-between gap-3">
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <span
+            aria-hidden
+            className="size-2 rounded-[2px]"
+            style={{ backgroundColor: campaignColor[campaignName] ?? "var(--muted-foreground)" }}
+          />
+          {campaignName}
+        </span>
+        <span className="font-medium font-mono tabular-nums">{metric.format(Number(value ?? 0))}</span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        spacing={1}
+        value={metricKey}
+        onValueChange={(v) => {
+          if (v) setMetricKey(v as MetricKey);
+        }}
+        className="flex-wrap"
+        aria-label="Select metric to compare"
+      >
+        {METRICS.map((m) => (
+          <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
+            <span
+              aria-hidden
+              className="mr-1.5 inline-block size-2 shrink-0 rounded-[2px]"
+              style={{ backgroundColor: m.color }}
+            />
+            {m.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+
+      {hasData ? (
+        <div className="rounded-lg border bg-card p-4">
+          <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
+            <div>
+              <h4 className="font-medium text-sm">{metric.label} across campaigns</h4>
+              <p className="text-muted-foreground text-xs">
+                {visibleCampaigns.length} of {allCampaigns.length} shown · {granularity} ·{" "}
+                {metric.aggregation === "sum" ? "summed" : "averaged"} per bucket
+              </p>
+            </div>
+            <div className="flex max-w-full flex-wrap items-center gap-3">
+              {summaryStats.slice(0, 6).map(({ campaign, value }) => (
+                <div key={campaign} className="flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="size-2 rounded-[2px]"
+                    style={{ backgroundColor: campaignColor[campaign] }}
+                  />
+                  <div className="flex flex-col leading-tight">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                      {campaign} · {metric.aggregation === "sum" ? "total" : "avg"}
+                    </span>
+                    <span className="font-medium text-sm tabular-nums">{metric.format(value)}</span>
+                  </div>
+                </div>
+              ))}
+              {summaryStats.length > 6 && (
+                <span className="text-muted-foreground text-xs">+{summaryStats.length - 6} more</span>
+              )}
+            </div>
+          </div>
+          {showChart ? (
+            <ChartContainer config={chartConfig} className="h-64 w-full">
+              {chartType === "bar" ? (
+                <BarChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }} barCategoryGap={6}>
+                  <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    fontSize={11}
+                    interval="preserveStartEnd"
+                  />
+                  {axisAssignment.descriptors.map((descriptor) => (
+                    <YAxis
+                      key={descriptor.id}
+                      yAxisId={descriptor.id}
+                      orientation={descriptor.orientation}
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={4}
+                      fontSize={10}
+                      width={descriptor.visible ? descriptor.width : 0}
+                      hide={!descriptor.visible}
+                      tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
+                    />
+                  ))}
+                  <ChartTooltip
+                    cursor={{ fill: "var(--muted)", fillOpacity: 0.4 }}
+                    content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
+                  />
+                  {visibleCampaigns.map((c) => (
+                    <Bar
+                      key={c.campaign}
+                      yAxisId={axisAssignment.metricToAxis[c.campaign]}
+                      dataKey={c.campaign}
+                      name={c.campaign}
+                      fill={campaignColor[c.campaign]}
+                      fillOpacity={0.9}
+                      radius={[2, 2, 0, 0]}
+                    />
+                  ))}
+                </BarChart>
+              ) : (
+                <LineChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }}>
+                  <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    fontSize={11}
+                    interval="preserveStartEnd"
+                  />
+                  {axisAssignment.descriptors.map((descriptor) => (
+                    <YAxis
+                      key={descriptor.id}
+                      yAxisId={descriptor.id}
+                      orientation={descriptor.orientation}
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={4}
+                      fontSize={10}
+                      width={descriptor.visible ? descriptor.width : 0}
+                      hide={!descriptor.visible}
+                      tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
+                    />
+                  ))}
+                  <ChartTooltip
+                    cursor={{ stroke: "var(--border)" }}
+                    content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
+                  />
+                  {visibleCampaigns.map((c) => (
+                    <Line
+                      key={c.campaign}
+                      yAxisId={axisAssignment.metricToAxis[c.campaign]}
+                      type="monotone"
+                      dataKey={c.campaign}
+                      name={c.campaign}
+                      stroke={campaignColor[c.campaign]}
+                      strokeWidth={2}
+                      dot={{ r: 3, strokeWidth: 0, fill: campaignColor[c.campaign] }}
+                      activeDot={{ r: 5, strokeWidth: 0 }}
+                    />
+                  ))}
+                </LineChart>
+              )}
+            </ChartContainer>
+          ) : (
+            <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-border border-dashed text-muted-foreground text-sm">
+              <span>All campaigns hidden. Click an entry below to bring one back.</span>
+            </div>
+          )}
+          <CampaignLegend
+            campaigns={allCampaigns.map((c) => c.campaign)}
+            hidden={hiddenCampaigns}
+            colorByName={campaignColor}
+            onToggle={toggleCampaign}
+            onShowAll={showAll}
+            onHideAll={hideAll}
+          />
+        </div>
+      ) : (
+        <div className="flex h-32 items-center justify-center rounded-lg border border-border border-dashed text-muted-foreground text-sm">
+          No campaigns to compare for this period.
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface CampaignLegendProps {
+  campaigns: ReadonlyArray<string>;
+  hidden: ReadonlySet<string>;
+  colorByName: Record<string, string>;
+  onToggle: (name: string) => void;
+  onShowAll: () => void;
+  onHideAll: () => void;
+}
+
+/**
+ * Clickable legend rendered below the compare chart. Each campaign is a button that
+ * toggles its series visibility. Hidden campaigns stay listed in a muted style so
+ * they can be restored. Quick actions allow showing/hiding everything at once.
+ */
+function CampaignLegend({ campaigns, hidden, colorByName, onToggle, onShowAll, onHideAll }: CampaignLegendProps) {
+  if (campaigns.length === 0) return null;
+  const allHidden = campaigns.every((c) => hidden.has(c));
+  const noneHidden = campaigns.every((c) => !hidden.has(c));
+  return (
+    <div className="flex flex-col gap-2 pt-3">
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {campaigns.map((name) => {
+          const isOff = hidden.has(name);
+          return (
+            <button
+              key={name}
+              type="button"
+              onClick={() => onToggle(name)}
+              aria-pressed={!isOff}
+              title={isOff ? `Show ${name}` : `Hide ${name}`}
+              className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${
+                isOff ? "border-dashed text-muted-foreground opacity-60" : "border-transparent"
+              }`}
+            >
+              <span
+                aria-hidden
+                className="size-2 rounded-[2px]"
+                style={{
+                  backgroundColor: isOff ? "transparent" : colorByName[name],
+                  outline: isOff ? `1.5px dashed ${colorByName[name] ?? "currentColor"}` : "none",
+                }}
+              />
+              <span className={isOff ? "line-through" : ""}>{name}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={onShowAll}
+          disabled={noneHidden}
+          className="rounded-md border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Show all
+        </button>
+        <button
+          type="button"
+          onClick={onHideAll}
+          disabled={allHidden}
+          className="rounded-md border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Hide all
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Demographics view
 // ---------------------------------------------------------------------------
@@ -748,6 +1259,50 @@ function readDemographicMetric(entry: CampaignDemographicDailyEntry, key: Metric
   }
 }
 
+/**
+ * Aggregate one demographic bucket across many campaigns, producing one value per
+ * (time bucket, campaign) pair. Used by demographics compare-by-campaign mode.
+ */
+function aggregateDemographicBucketByCampaign(
+  campaigns: CampaignDemographicsReport["campaigns"],
+  dimension: DemographicDimension,
+  demographicBucketKey: string,
+  metric: MetricSpec,
+  granularity: CampaignGranularity,
+): CompareBucketDatum[] {
+  const map = new Map<string, CompareBucketDatum>();
+  for (const c of campaigns) {
+    const slice = c.slices.find((s) => s.dimension === dimension);
+    if (!slice) continue;
+    for (const entry of slice.days) {
+      if (entry.bucket !== demographicBucketKey) continue;
+      const key = bucketKey(entry.date, granularity);
+      const existing =
+        map.get(key) ??
+        ({
+          bucket: key,
+          label: formatBucketLabel(key, granularity),
+          values: {},
+          counts: {},
+        } satisfies CompareBucketDatum);
+      const raw = readDemographicMetric(entry, metric.key);
+      existing.values[c.campaign] = (existing.values[c.campaign] ?? 0) + raw;
+      existing.counts[c.campaign] = (existing.counts[c.campaign] ?? 0) + 1;
+      map.set(key, existing);
+    }
+  }
+  const list = Array.from(map.values()).sort((a, b) => a.bucket.localeCompare(b.bucket));
+  if (metric.aggregation === "avg") {
+    for (const datum of list) {
+      for (const name of Object.keys(datum.values)) {
+        const count = datum.counts[name] ?? 0;
+        if (count > 0) datum.values[name] = datum.values[name] / count;
+      }
+    }
+  }
+  return list;
+}
+
 function mergeSlicesAcrossCampaigns(
   campaigns: CampaignDemographicsReport["campaigns"],
   dimension: DemographicDimension,
@@ -772,9 +1327,130 @@ function DemographicsView({ demographics, granularity }: DemographicsViewProps) 
     ? "age_range"
     : "gender";
 
+  const [mode, setMode] = useState<DemographicsMode>("buckets");
   const [dimension, setDimension] = useState<DemographicDimension>(initialDimension);
   const [metricKey, setMetricKey] = useState<MetricKey>("spend");
   const [chartType, setChartType] = useState<ChartType>("line");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          spacing={1}
+          value={mode}
+          onValueChange={(v) => {
+            if (v === "buckets" || v === "compare") setMode(v);
+          }}
+          aria-label="Demographics mode"
+        >
+          {DEMOGRAPHICS_MODES.map((m) => (
+            <ToggleGroupItem key={m.key} value={m.key} className="text-xs" title={m.description}>
+              {m.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          spacing={1}
+          value={chartType}
+          onValueChange={(v) => {
+            if (v === "bar" || v === "line") setChartType(v);
+          }}
+          aria-label="Chart type"
+        >
+          <ToggleGroupItem value="bar" className="text-xs">
+            Bar
+          </ToggleGroupItem>
+          <ToggleGroupItem value="line" className="text-xs">
+            Line
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        spacing={1}
+        value={dimension}
+        onValueChange={(v) => {
+          if (v === "gender" || v === "age_range") setDimension(v);
+        }}
+        aria-label="Demographic dimension"
+      >
+        {DEMOGRAPHIC_DIMENSIONS.map((d) => (
+          <ToggleGroupItem key={d.key} value={d.key} className="text-xs">
+            {d.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        spacing={1}
+        value={metricKey}
+        onValueChange={(v) => {
+          if (v) setMetricKey(v as MetricKey);
+        }}
+        className="flex-wrap"
+        aria-label="Select metric"
+      >
+        {METRICS.map((m) => (
+          <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
+            <span
+              aria-hidden
+              className="mr-1.5 inline-block size-2 shrink-0 rounded-[2px]"
+              style={{ backgroundColor: m.color }}
+            />
+            {m.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+
+      {mode === "compare" ? (
+        <DemographicsCompareCampaignView
+          demographics={demographics}
+          granularity={granularity}
+          dimension={dimension}
+          metricKey={metricKey}
+          chartType={chartType}
+        />
+      ) : (
+        <DemographicsBucketsView
+          demographics={demographics}
+          granularity={granularity}
+          dimension={dimension}
+          metricKey={metricKey}
+          chartType={chartType}
+        />
+      )}
+    </div>
+  );
+}
+
+interface DemographicsBucketsViewProps {
+  demographics: CampaignDemographicsReport;
+  granularity: CampaignGranularity;
+  dimension: DemographicDimension;
+  metricKey: MetricKey;
+  chartType: ChartType;
+}
+
+function DemographicsBucketsView({
+  demographics,
+  granularity,
+  dimension,
+  metricKey,
+  chartType,
+}: DemographicsBucketsViewProps) {
   const [selected, setSelected] = useState<string>(ALL_CAMPAIGNS_VALUE);
   const [hiddenBucketKeys, setHiddenBucketKeys] = useState<Set<string>>(() => new Set());
 
@@ -897,69 +1573,6 @@ function DemographicsView({ demographics, granularity }: DemographicsViewProps) 
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          spacing={1}
-          value={dimension}
-          onValueChange={(v) => {
-            if (v === "gender" || v === "age_range") setDimension(v);
-          }}
-          aria-label="Demographic dimension"
-        >
-          {DEMOGRAPHIC_DIMENSIONS.map((d) => (
-            <ToggleGroupItem key={d.key} value={d.key} className="text-xs">
-              {d.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          spacing={1}
-          value={chartType}
-          onValueChange={(v) => {
-            if (v === "bar" || v === "line") setChartType(v);
-          }}
-          aria-label="Chart type"
-        >
-          <ToggleGroupItem value="bar" className="text-xs">
-            Bar
-          </ToggleGroupItem>
-          <ToggleGroupItem value="line" className="text-xs">
-            Line
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-
-      <ToggleGroup
-        type="single"
-        variant="outline"
-        size="sm"
-        spacing={1}
-        value={metricKey}
-        onValueChange={(v) => {
-          if (v) setMetricKey(v as MetricKey);
-        }}
-        className="flex-wrap"
-        aria-label="Select metric"
-      >
-        {METRICS.map((m) => (
-          <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
-            <span
-              aria-hidden
-              className="mr-1.5 inline-block size-2 shrink-0 rounded-[2px]"
-              style={{ backgroundColor: m.color }}
-            />
-            {m.label}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
-
       {demographics.campaigns.length > 0 && (
         <ToggleGroup
           type="single"
@@ -1109,6 +1722,278 @@ function DemographicsView({ demographics, granularity }: DemographicsViewProps) 
             hidden={hiddenBucketKeys}
             colorByKey={bucketColor}
             onToggle={toggleBucket}
+          />
+        </div>
+      ) : (
+        <div className="flex h-32 items-center justify-center rounded-lg border border-border border-dashed text-muted-foreground text-sm">
+          No demographic data for this selection.
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface DemographicsCompareCampaignViewProps {
+  demographics: CampaignDemographicsReport;
+  granularity: CampaignGranularity;
+  dimension: DemographicDimension;
+  metricKey: MetricKey;
+  chartType: ChartType;
+}
+
+function DemographicsCompareCampaignView({
+  demographics,
+  granularity,
+  dimension,
+  metricKey,
+  chartType,
+}: DemographicsCompareCampaignViewProps) {
+  const metric = METRIC_BY_KEY[metricKey];
+  const [bucketKeySelected, setBucketKeySelected] = useState<string>("");
+  const [hiddenCampaigns, setHiddenCampaigns] = useState<Set<string>>(() => new Set());
+
+  const slice = useMemo(() => mergeSlicesAcrossCampaigns(demographics.campaigns, dimension), [demographics, dimension]);
+  const buckets = useMemo(() => slice?.buckets ?? [], [slice]);
+
+  useEffect(() => {
+    const first = buckets[0]?.key ?? "";
+    if (!first) {
+      if (bucketKeySelected) setBucketKeySelected("");
+      return;
+    }
+    if (!bucketKeySelected) {
+      setBucketKeySelected(first);
+      return;
+    }
+    const exists = buckets.some((b) => b.key === bucketKeySelected);
+    if (!exists) setBucketKeySelected(first);
+  }, [buckets, bucketKeySelected]);
+
+  useEffect(() => {
+    setHiddenCampaigns((prev) => {
+      if (prev.size === 0) return prev;
+      const valid = new Set(demographics.campaigns.map((c) => c.campaign));
+      const next = new Set<string>();
+      for (const name of prev) if (valid.has(name)) next.add(name);
+      return next.size === prev.size ? prev : next;
+    });
+  }, [demographics]);
+
+  const campaignColor = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const c of demographics.campaigns) map[c.campaign] = colorForCampaign(c.campaign);
+    return map;
+  }, [demographics.campaigns]);
+
+  const visibleCampaigns = useMemo(
+    () => demographics.campaigns.filter((c) => !hiddenCampaigns.has(c.campaign)),
+    [demographics.campaigns, hiddenCampaigns],
+  );
+
+  const datums = useMemo(() => {
+    if (!bucketKeySelected) return [];
+    return aggregateDemographicBucketByCampaign(
+      demographics.campaigns,
+      dimension,
+      bucketKeySelected,
+      metric,
+      granularity,
+    );
+  }, [demographics.campaigns, dimension, bucketKeySelected, metric, granularity]);
+
+  const chartData = useMemo(() => {
+    return datums.map((d) => {
+      const row: Record<string, number | string> = { bucket: d.bucket, label: d.label };
+      for (const c of visibleCampaigns) row[c.campaign] = d.values[c.campaign] ?? 0;
+      return row;
+    });
+  }, [datums, visibleCampaigns]);
+
+  const axisAssignment = useMemo(
+    () =>
+      computeAxisAssignmentForSingleUnit(
+        metric.unit,
+        visibleCampaigns.map((c) => c.campaign),
+      ),
+    [metric.unit, visibleCampaigns],
+  );
+
+  const chartConfig = useMemo<ChartConfig>(() => {
+    const config: ChartConfig = {};
+    for (const c of demographics.campaigns)
+      config[c.campaign] = { color: campaignColor[c.campaign], label: c.campaign };
+    return config;
+  }, [demographics.campaigns, campaignColor]);
+
+  const toggleCampaign = (name: string) => {
+    setHiddenCampaigns((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const showAll = () => setHiddenCampaigns(new Set());
+  const hideAll = () => setHiddenCampaigns(new Set(demographics.campaigns.map((c) => c.campaign)));
+
+  const hasData = buckets.length > 0 && datums.length > 0;
+  const allHidden = hasData && visibleCampaigns.length === 0;
+  const showChart = hasData && !allHidden;
+
+  const selectedBucketLabel = buckets.find((b) => b.key === bucketKeySelected)?.label ?? "—";
+
+  const tooltipFormatter = (value: unknown, name: unknown) => {
+    const campaignName = String(name);
+    return (
+      <div className="flex w-full items-center justify-between gap-3">
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <span
+            aria-hidden
+            className="size-2 rounded-[2px]"
+            style={{ backgroundColor: campaignColor[campaignName] ?? "var(--muted-foreground)" }}
+          />
+          {campaignName}
+        </span>
+        <span className="font-medium font-mono tabular-nums">{metric.format(Number(value ?? 0))}</span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        spacing={1}
+        value={bucketKeySelected}
+        onValueChange={(v) => {
+          if (v) setBucketKeySelected(v);
+        }}
+        className="flex-wrap"
+        aria-label="Select demographic bucket to compare across campaigns"
+      >
+        {buckets.map((b) => (
+          <ToggleGroupItem key={b.key} value={b.key} className="text-xs">
+            {b.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+
+      {hasData ? (
+        <div className="rounded-lg border bg-card p-4">
+          <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
+            <div>
+              <h4 className="font-medium text-sm">
+                {selectedBucketLabel} · {metric.label} across campaigns
+              </h4>
+              <p className="text-muted-foreground text-xs">
+                {visibleCampaigns.length} of {demographics.campaigns.length} shown · {granularity} ·{" "}
+                {dimension === "age_range" ? "Age range" : "Gender"}
+              </p>
+            </div>
+          </div>
+          {showChart ? (
+            <ChartContainer config={chartConfig} className="h-64 w-full">
+              {chartType === "bar" ? (
+                <BarChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }} barCategoryGap={6}>
+                  <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    fontSize={11}
+                    interval="preserveStartEnd"
+                  />
+                  {axisAssignment.descriptors.map((descriptor) => (
+                    <YAxis
+                      key={descriptor.id}
+                      yAxisId={descriptor.id}
+                      orientation={descriptor.orientation}
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={4}
+                      fontSize={10}
+                      width={descriptor.visible ? descriptor.width : 0}
+                      hide={!descriptor.visible}
+                      tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
+                    />
+                  ))}
+                  <ChartTooltip
+                    cursor={{ fill: "var(--muted)", fillOpacity: 0.4 }}
+                    content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
+                  />
+                  {visibleCampaigns.map((c) => (
+                    <Bar
+                      key={c.campaign}
+                      yAxisId={axisAssignment.metricToAxis[c.campaign]}
+                      dataKey={c.campaign}
+                      name={c.campaign}
+                      fill={campaignColor[c.campaign]}
+                      fillOpacity={0.9}
+                      radius={[2, 2, 0, 0]}
+                    />
+                  ))}
+                </BarChart>
+              ) : (
+                <LineChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }}>
+                  <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    fontSize={11}
+                    interval="preserveStartEnd"
+                  />
+                  {axisAssignment.descriptors.map((descriptor) => (
+                    <YAxis
+                      key={descriptor.id}
+                      yAxisId={descriptor.id}
+                      orientation={descriptor.orientation}
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={4}
+                      fontSize={10}
+                      width={descriptor.visible ? descriptor.width : 0}
+                      hide={!descriptor.visible}
+                      tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
+                    />
+                  ))}
+                  <ChartTooltip
+                    cursor={{ stroke: "var(--border)" }}
+                    content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
+                  />
+                  {visibleCampaigns.map((c) => (
+                    <Line
+                      key={c.campaign}
+                      yAxisId={axisAssignment.metricToAxis[c.campaign]}
+                      type="monotone"
+                      dataKey={c.campaign}
+                      name={c.campaign}
+                      stroke={campaignColor[c.campaign]}
+                      strokeWidth={2}
+                      dot={{ r: 3, strokeWidth: 0, fill: campaignColor[c.campaign] }}
+                      activeDot={{ r: 5, strokeWidth: 0 }}
+                    />
+                  ))}
+                </LineChart>
+              )}
+            </ChartContainer>
+          ) : (
+            <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-border border-dashed text-muted-foreground text-sm">
+              <span>All campaigns hidden. Click an entry below to bring one back.</span>
+            </div>
+          )}
+          <CampaignLegend
+            campaigns={demographics.campaigns.map((c) => c.campaign)}
+            hidden={hiddenCampaigns}
+            colorByName={campaignColor}
+            onToggle={toggleCampaign}
+            onShowAll={showAll}
+            onHideAll={hideAll}
           />
         </div>
       ) : (

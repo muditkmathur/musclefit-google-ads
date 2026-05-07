@@ -49,7 +49,7 @@ async function fetchSearchTermsReport(monthsBack: number, campaignFilter: string
     end: formatYmd(end),
   };
 
-  const customer = getCustomer();
+  const customer = await getCustomer();
   const whereClause = campaignFilter
     ? `WHERE segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}' AND metrics.cost_micros > 0 AND campaign.name LIKE '%${campaignFilter.replaceAll("'", "\\'")}%'`
     : `WHERE segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}' AND metrics.cost_micros > 0`;

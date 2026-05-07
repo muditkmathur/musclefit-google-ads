@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { RefreshCw } from "lucide-react";
 
@@ -32,12 +35,19 @@ function rangeLabel(range: CampaignRangeKey): string {
   return RANGE_OPTIONS.find((o) => o.value === range)?.label ?? "Selected period";
 }
 
-export function CampaignReportCard() {
+type OauthNotice = { variant: "default" | "destructive"; title: string; description: string } | null;
+
+function CampaignReportCardContent() {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+
   const [range, setRange] = useState<CampaignRangeKey>("last-4-weeks");
   const [granularity, setGranularity] = useState<CampaignGranularity>("day");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<CampaignReport | null>(null);
+  const [oauthNotice, setOauthNotice] = useState<OauthNotice>(null);
 
   const fetchReport = useCallback(async (selectedRange: CampaignRangeKey, selectedGranularity: CampaignGranularity) => {
     setLoading(true);
@@ -59,6 +69,59 @@ export function CampaignReportCard() {
   useEffect(() => {
     void fetchReport(range, granularity);
   }, [fetchReport, range, granularity]);
+
+  useEffect(() => {
+    const status = searchParams.get("google_ads_oauth");
+    if (!status) return;
+
+    const reason = searchParams.get("google_ads_oauth_reason");
+
+    const describeReason = () => (reason ? (reason.length > 220 ? `${reason.slice(0, 220)}…` : reason) : "");
+
+    switch (status) {
+      case "success":
+        setOauthNotice({
+          variant: "default",
+          title: "Google Ads connected",
+          description: "Your refresh token was saved. The report below will load with your authorized account.",
+        });
+        void fetchReport(range, granularity);
+        break;
+      case "denied":
+        setOauthNotice({
+          variant: "destructive",
+          title: "Google sign-in was cancelled",
+          description: describeReason() || "Authorization did not complete.",
+        });
+        break;
+      case "invalid":
+        setOauthNotice({
+          variant: "destructive",
+          title: "OAuth session expired",
+          description: "Try connecting again from this page.",
+        });
+        break;
+      case "no_refresh":
+        setOauthNotice({
+          variant: "destructive",
+          title: "No refresh token from Google",
+          description:
+            "In Google Account → Security, remove this app’s access, then connect again. Or use a test user on the OAuth consent screen while the app is in testing.",
+        });
+        break;
+      case "error":
+        setOauthNotice({
+          variant: "destructive",
+          title: "Could not finish Google Ads sign-in",
+          description: describeReason() || "Token exchange failed.",
+        });
+        break;
+      default:
+        setOauthNotice(null);
+    }
+
+    router.replace(pathname, { scroll: false });
+  }, [searchParams, pathname, router, range, granularity, fetchReport]);
 
   const currentLabel = rangeLabel(range);
 
@@ -100,6 +163,10 @@ export function CampaignReportCard() {
                 </SelectGroup>
               </SelectContent>
             </Select>
+
+            <Button variant="secondary" asChild className="whitespace-nowrap">
+              <Link href="/api/google-ads/oauth/authorize">Connect Google Ads</Link>
+            </Button>
           </div>
 
           {report && !loading && (
@@ -120,6 +187,13 @@ export function CampaignReportCard() {
             {loading ? <Spinner /> : <RefreshCw />}
           </Button>
         </div>
+
+        {oauthNotice && (
+          <Alert variant={oauthNotice.variant === "destructive" ? "destructive" : "default"}>
+            <AlertTitle>{oauthNotice.title}</AlertTitle>
+            <AlertDescription>{oauthNotice.description}</AlertDescription>
+          </Alert>
+        )}
 
         {error && (
           <Alert variant="destructive">
@@ -144,5 +218,22 @@ export function CampaignReportCard() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+export function CampaignReportCard() {
+  return (
+    <Suspense
+      fallback={
+        <Card>
+          <CardHeader>
+            <CardTitle>Campaign report</CardTitle>
+            <CardDescription>Loading…</CardDescription>
+          </CardHeader>
+        </Card>
+      }
+    >
+      <CampaignReportCardContent />
+    </Suspense>
   );
 }

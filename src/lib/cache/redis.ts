@@ -42,16 +42,22 @@ export function getRedis(): RedisClient | null {
       db,
       password,
       lazyConnect: false,
-      maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
+      /** Allow commands to queue until reconnect; false causes "Stream isn't writeable" when briefly disconnected. */
+      enableOfflineQueue: true,
+      maxRetriesPerRequest: 3,
       retryStrategy: (times) => {
-        if (times > 3) return null;
-        return Math.min(times * 200, 1000);
+        /** Stop after sustained failure so the process doesn't retry forever (e.g. Redis never configured). */
+        if (times > 50) return null;
+        return Math.min(times * 100, 3000);
       },
     });
 
     client.on("error", (err) => {
       logOnce("[cache] Redis client error; query caching will fail-open.", err);
+    });
+
+    client.on("end", () => {
+      cachedClient = null;
     });
 
     cachedClient = client;

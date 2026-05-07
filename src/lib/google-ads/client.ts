@@ -1,5 +1,8 @@
 import { type Customer, GoogleAdsApi } from "google-ads-api";
 
+import { getCachedGoogleAdsCustomer, resetGoogleAdsCustomerCache, setCachedGoogleAdsCustomer } from "./customer-cache";
+import { resolveGoogleAdsRefreshToken } from "./refresh-token";
+
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value || value.trim() === "") {
@@ -8,14 +11,16 @@ function requireEnv(name: string): string {
   return value;
 }
 
-let cachedCustomer: Customer | null = null;
-
 export function getCustomerId(): string {
   return requireEnv("GOOGLE_ADS_CUSTOMER_ID");
 }
 
-export function getCustomer(): Customer {
-  if (cachedCustomer) return cachedCustomer;
+export { resetGoogleAdsCustomerCache };
+
+export async function getCustomer(): Promise<Customer> {
+  const refreshToken = await resolveGoogleAdsRefreshToken();
+  const hit = getCachedGoogleAdsCustomer(refreshToken);
+  if (hit) return hit;
 
   const client = new GoogleAdsApi({
     client_id: requireEnv("GOOGLE_ADS_CLIENT_ID"),
@@ -23,10 +28,12 @@ export function getCustomer(): Customer {
     developer_token: requireEnv("GOOGLE_ADS_DEVELOPER_TOKEN"),
   });
 
-  cachedCustomer = client.Customer({
+  const customer = client.Customer({
     customer_id: requireEnv("GOOGLE_ADS_CUSTOMER_ID"),
-    refresh_token: requireEnv("GOOGLE_ADS_REFRESH_TOKEN"),
+    refresh_token: refreshToken,
   });
 
-  return cachedCustomer;
+  setCachedGoogleAdsCustomer(customer, refreshToken);
+
+  return customer;
 }
