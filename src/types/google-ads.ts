@@ -135,6 +135,8 @@ export interface SearchTermRow {
   ctr: number;
   costMicros: number;
   cost: number;
+  conversions: number;
+  conversionValue: number;
 }
 
 export interface SearchTermsReport {
@@ -148,6 +150,8 @@ export interface SearchTermsReport {
     totalImpressions: number;
     overallCtr: number;
     totalCost: number;
+    totalConversions: number;
+    totalConversionValue: number;
   };
 }
 
@@ -188,6 +192,11 @@ export interface NgramAnalysisResult {
     rowsBeforeCampaignFilter: number;
   };
   ngrams: Record<string, NgramItem[]>;
+}
+
+export interface KeywordAnalysisBundle {
+  searchTerms: SearchTermsReport;
+  ngrams: NgramAnalysisResult;
 }
 
 export interface CampaignKeywordRow {

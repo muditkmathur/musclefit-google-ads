@@ -36,6 +36,8 @@ async function main() {
         Impressions: r.impressions,
         CTR: (r.ctr * 100).toFixed(2) + '%',
         'Cost (₹)': r.cost.toFixed(2),
+        Conversions: r.conversions,
+        'Conv. value': r.conversionValue,
       })),
     );
 
@@ -51,6 +53,10 @@ async function main() {
       }%`,
     );
     console.log(`Total Cost:        ₹${result.summary.totalCost.toFixed(2)}`);
+    console.log(`Total Conversions: ${result.summary.totalConversions}`);
+    console.log(
+      `Total Conv. value: ${result.summary.totalConversionValue.toFixed(2)}`,
+    );
     console.log('───────────────────────────────────────────\n');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

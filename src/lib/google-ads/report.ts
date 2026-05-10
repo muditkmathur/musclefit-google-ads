@@ -122,6 +122,7 @@ export interface RunCampaignReportOptions {
   includePrevious?: boolean;
   saveToDisk?: boolean;
   outputDir?: string;
+  forceRefresh?: boolean;
 }
 
 export type RunCampaignReportResult = CampaignReport;
@@ -137,15 +138,24 @@ interface CampaignQueryResult {
   totalsRaw: CampaignTotalsRaw;
 }
 
-async function queryCampaignSummary(rangeStart: string, rangeEnd: string): Promise<CampaignQueryResult> {
+async function queryCampaignSummary(
+  rangeStart: string,
+  rangeEnd: string,
+  options: { forceRefresh?: boolean } = {},
+): Promise<CampaignQueryResult> {
   const cacheKey = buildCacheKey("report:summary", {
     customerId: getCustomerId(),
     rangeStart,
     rangeEnd,
   });
-  return getOrSetJson<CampaignQueryResult>(cacheKey, async () => {
-    return queryCampaignSummaryUncached(rangeStart, rangeEnd);
-  });
+  return getOrSetJson<CampaignQueryResult>(
+    cacheKey,
+    async () => {
+      return queryCampaignSummaryUncached(rangeStart, rangeEnd);
+    },
+    undefined,
+    { forceRefresh: options.forceRefresh === true },
+  );
 }
 
 async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string): Promise<CampaignQueryResult> {
@@ -239,12 +249,13 @@ export async function runCampaignReport(options: RunCampaignReportOptions = {}):
   const { start: rangeStart, end: rangeEnd } = dateRange;
   const periodLabel = rangeLabel(range);
 
-  const current = await queryCampaignSummary(rangeStart, rangeEnd);
+  const forceRefresh = options.forceRefresh === true;
+  const current = await queryCampaignSummary(rangeStart, rangeEnd, { forceRefresh });
 
   const previousDateRange = previousRange(dateRange);
   let previous: CampaignQueryResult | null = null;
   if (includePrevious) {
-    previous = await queryCampaignSummary(previousDateRange.start, previousDateRange.end);
+    previous = await queryCampaignSummary(previousDateRange.start, previousDateRange.end, { forceRefresh });
   }
 
   const generatedAt = new Date().toISOString();
@@ -289,6 +300,7 @@ export async function runCampaignReport(options: RunCampaignReportOptions = {}):
       rangeStart,
       rangeEnd,
       periodLabel,
+      forceRefresh,
     });
     result.daily = daily;
   }
@@ -300,6 +312,7 @@ export async function runCampaignReport(options: RunCampaignReportOptions = {}):
         rangeStart,
         rangeEnd,
         periodLabel,
+        forceRefresh,
       });
       result.demographics = demographics;
     } catch (err) {
@@ -346,17 +359,20 @@ interface DailyContext {
   rangeStart: string;
   rangeEnd: string;
   periodLabel: string;
+  forceRefresh?: boolean;
 }
 
 async function getCampaignDailyReport(ctx: DailyContext): Promise<CampaignDailyReport> {
-  const { rangeStart, rangeEnd, periodLabel } = ctx;
+  const { rangeStart, rangeEnd, periodLabel, forceRefresh } = ctx;
   const cacheKey = buildCacheKey("report:daily", {
     customerId: getCustomerId(),
     rangeStart,
     rangeEnd,
     periodLabel,
   });
-  return getOrSetJson<CampaignDailyReport>(cacheKey, () => getCampaignDailyReportUncached(ctx));
+  return getOrSetJson<CampaignDailyReport>(cacheKey, () => getCampaignDailyReportUncached(ctx), undefined, {
+    forceRefresh: forceRefresh === true,
+  });
 }
 
 async function getCampaignDailyReportUncached(ctx: DailyContext): Promise<CampaignDailyReport> {
@@ -608,14 +624,16 @@ function sortBuckets(dimension: DemographicDimension, buckets: Array<{ key: stri
 }
 
 async function getCampaignDemographicsReport(ctx: DailyContext): Promise<CampaignDemographicsReport> {
-  const { rangeStart, rangeEnd, periodLabel } = ctx;
+  const { rangeStart, rangeEnd, periodLabel, forceRefresh } = ctx;
   const cacheKey = buildCacheKey("report:demographics", {
     customerId: getCustomerId(),
     rangeStart,
     rangeEnd,
     periodLabel,
   });
-  return getOrSetJson<CampaignDemographicsReport>(cacheKey, () => getCampaignDemographicsReportUncached(ctx));
+  return getOrSetJson<CampaignDemographicsReport>(cacheKey, () => getCampaignDemographicsReportUncached(ctx), undefined, {
+    forceRefresh: forceRefresh === true,
+  });
 }
 
 interface RawDemographicRow {

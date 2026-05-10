@@ -28,10 +28,12 @@ export async function getOrSetJson<T>(
   key: string,
   loader: () => Promise<T>,
   ttlSeconds: number = CACHE_TTL_SECONDS,
+  options: { forceRefresh?: boolean } = {},
 ): Promise<T> {
   const client = getRedis();
+  const forceRefresh = options.forceRefresh === true;
 
-  if (client) {
+  if (client && !forceRefresh) {
     try {
       const hit = await client.get(key);
       if (hit) {

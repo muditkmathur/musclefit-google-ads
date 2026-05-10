@@ -49,22 +49,30 @@ function CampaignReportCardContent() {
   const [report, setReport] = useState<CampaignReport | null>(null);
   const [oauthNotice, setOauthNotice] = useState<OauthNotice>(null);
 
-  const fetchReport = useCallback(async (selectedRange: CampaignRangeKey, selectedGranularity: CampaignGranularity) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await getCampaignReport({
-        range: selectedRange,
-        granularity: selectedGranularity,
-      });
-      if (!result.ok) throw new Error(result.error);
-      setReport(result.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchReport = useCallback(
+    async (
+      selectedRange: CampaignRangeKey,
+      selectedGranularity: CampaignGranularity,
+      options: { forceRefresh?: boolean } = {},
+    ) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await getCampaignReport({
+          range: selectedRange,
+          granularity: selectedGranularity,
+          forceRefresh: Boolean(options.forceRefresh),
+        });
+        if (!result.ok) throw new Error(result.error);
+        setReport(result.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     void fetchReport(range, granularity);
@@ -179,7 +187,7 @@ function CampaignReportCardContent() {
             type="button"
             variant="outline"
             size="icon"
-            onClick={() => void fetchReport(range, granularity)}
+            onClick={() => void fetchReport(range, granularity, { forceRefresh: true })}
             disabled={loading}
             className="sm:ml-auto"
             aria-label="Refresh report"

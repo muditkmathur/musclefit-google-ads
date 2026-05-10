@@ -271,6 +271,11 @@ function formatBucketLabel(key: string, granularity: CampaignGranularity): strin
   return date.toLocaleString(undefined, { month: "short", year: "numeric" });
 }
 
+function isSundayBucket(key: string | undefined, granularity: CampaignGranularity): boolean {
+  if (granularity !== "day" || !key) return false;
+  return new Date(`${key}T00:00:00`).getDay() === 0;
+}
+
 interface BucketDatum {
   bucket: string;
   label: string;
@@ -284,6 +289,64 @@ type ChartRow = {
   bucket: string;
   label: string;
 } & Partial<Record<MetricKey, number>>;
+
+interface SundayAwareXAxisProps {
+  data: ReadonlyArray<{ bucket?: unknown }>;
+  granularity: CampaignGranularity;
+}
+
+interface SundayTickProps {
+  x?: unknown;
+  y?: unknown;
+  payload?: {
+    value?: unknown;
+    index?: number;
+    payload?: { bucket?: unknown };
+  };
+}
+
+interface SundayAwareTickProps extends SundayAwareXAxisProps {
+  tick: SundayTickProps;
+}
+
+function numericCoordinate(value: unknown): number {
+  return typeof value === "number" ? value : 0;
+}
+
+function SundayAwareTick({ tick, data, granularity }: SundayAwareTickProps) {
+  const { payload } = tick;
+  const index = typeof payload?.index === "number" ? payload.index : -1;
+  const rawBucket = payload?.payload?.bucket ?? data[index]?.bucket;
+  const bucket = typeof rawBucket === "string" ? rawBucket : undefined;
+  const isSunday = isSundayBucket(bucket, granularity);
+
+  return (
+    <text
+      x={numericCoordinate(tick.x)}
+      y={numericCoordinate(tick.y)}
+      dy={16}
+      textAnchor="middle"
+      fill={isSunday ? "#ef4444" : "var(--muted-foreground)"}
+      fontSize={11}
+      fontWeight={isSunday ? 600 : 400}
+    >
+      {String(payload?.value ?? "")}
+    </text>
+  );
+}
+
+function SundayAwareXAxis({ data, granularity }: SundayAwareXAxisProps) {
+  return (
+    <XAxis
+      dataKey="label"
+      tickLine={false}
+      axisLine={false}
+      tickMargin={8}
+      interval="preserveStartEnd"
+      tick={(props) => <SundayAwareTick tick={props} data={data} granularity={granularity} />}
+    />
+  );
+}
 
 /**
  * @param portfolioMode When true (all campaigns / "Cumulative" view), CTR in each time bucket is
@@ -689,14 +752,7 @@ function CombinedDailyView({ daily, granularity, chartType, mode }: CombinedDail
             {chartType === "bar" ? (
               <BarChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }} barCategoryGap={6}>
                 <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  fontSize={11}
-                  interval="preserveStartEnd"
-                />
+                <SundayAwareXAxis data={chartData} granularity={granularity} />
                 {axisAssignment.descriptors.map((descriptor) => (
                   <YAxis
                     key={descriptor.id}
@@ -732,14 +788,7 @@ function CombinedDailyView({ daily, granularity, chartType, mode }: CombinedDail
             ) : (
               <LineChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }}>
                 <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  fontSize={11}
-                  interval="preserveStartEnd"
-                />
+                <SundayAwareXAxis data={chartData} granularity={granularity} />
                 {axisAssignment.descriptors.map((descriptor) => (
                   <YAxis
                     key={descriptor.id}
@@ -961,14 +1010,7 @@ function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewPro
               {chartType === "bar" ? (
                 <BarChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }} barCategoryGap={6}>
                   <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    fontSize={11}
-                    interval="preserveStartEnd"
-                  />
+                  <SundayAwareXAxis data={chartData} granularity={granularity} />
                   {axisAssignment.descriptors.map((descriptor) => (
                     <YAxis
                       key={descriptor.id}
@@ -1002,14 +1044,7 @@ function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewPro
               ) : (
                 <LineChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }}>
                   <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    fontSize={11}
-                    interval="preserveStartEnd"
-                  />
+                  <SundayAwareXAxis data={chartData} granularity={granularity} />
                   {axisAssignment.descriptors.map((descriptor) => (
                     <YAxis
                       key={descriptor.id}

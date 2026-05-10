@@ -1,6 +1,7 @@
 "use server";
 
 import { runCampaignKeywords } from "@/lib/google-ads/campaign-keywords";
+import { runKeywordAnalysisBundle } from "@/lib/google-ads/keyword-analysis";
 import { analyzeNgrams } from "@/lib/google-ads/ngram-analysis";
 import { runCampaignReport } from "@/lib/google-ads/report";
 import { runSearchTermsReport } from "@/lib/google-ads/search-terms";
@@ -9,6 +10,7 @@ import type {
   CampaignKeywordsReport,
   CampaignRangeKey,
   CampaignReport,
+  KeywordAnalysisBundle,
   NgramAnalysisOptions,
   NgramAnalysisResult,
   SearchTermRow,
@@ -96,6 +98,7 @@ export interface CampaignReportActionInput {
   range?: CampaignRangeKey;
   granularity?: CampaignGranularity;
   saveToDisk?: boolean;
+  forceRefresh?: boolean;
 }
 
 export async function getCampaignReport(
@@ -120,6 +123,7 @@ export async function getCampaignReport(
       includeDemographics: true,
       includePrevious: true,
       saveToDisk: Boolean(input.saveToDisk),
+      forceRefresh: Boolean(input.forceRefresh),
     });
     return { ok: true, data };
   } catch (err) {
@@ -196,6 +200,35 @@ export async function getCampaignKeywords(
       };
     }
     const data = await runCampaignKeywords({ campaignId, campaignName });
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface KeywordAnalysisActionInput {
+  months?: number;
+  campaign?: string | null;
+  options?: NgramAnalysisOptions;
+  forceRefresh?: boolean;
+}
+
+export async function getKeywordAnalysisBundle(
+  input: KeywordAnalysisActionInput = {},
+): Promise<ActionResult<KeywordAnalysisBundle>> {
+  try {
+    const months = Number(input.months);
+    const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
+    const monthsBack = Number.isFinite(months) && months > 0 ? months : 3;
+
+    const data = await runKeywordAnalysisBundle({
+      monthsBack,
+      campaign,
+      ngramOptions: input.options ?? {},
+      forceRefresh: Boolean(input.forceRefresh),
+    });
+
     return { ok: true, data };
   } catch (err) {
     console.error(err);
