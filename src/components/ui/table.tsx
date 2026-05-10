@@ -4,19 +4,29 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+type TableProps = React.ComponentProps<"table"> & {
+  /** Omit the default overflow-x wrapper so sticky `th` works inside your own scroll container. */
+  noScrollContainer?: boolean;
+};
+
+function Table({ className, noScrollContainer, ...props }: TableProps) {
+  const tableEl = (
+    <table
+      data-slot="table"
+      className={cn("w-full caption-bottom text-sm", className)}
+      {...props}
+    />
+  );
+
+  if (noScrollContainer) {
+    return tableEl;
+  }
+
   return (
-    <div
-      data-slot="table-container"
-      className="relative w-full overflow-x-auto"
-    >
-      <table
-        data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
-        {...props}
-      />
+    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+      {tableEl}
     </div>
-  )
+  );
 }
 
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {

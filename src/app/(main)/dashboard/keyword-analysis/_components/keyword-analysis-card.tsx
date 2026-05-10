@@ -16,7 +16,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import type { KeywordAnalysisBundle, NgramAnalysisResult, SearchTermsReport } from "@/types/google-ads";
+
+/** Sticky header styling for scrollable analysis tables (distinct from body rows). */
+const TABLE_HEAD_STICKY =
+  "sticky top-0 z-10 bg-muted/90 text-foreground shadow-[0_1px_0_hsl(var(--border))] backdrop-blur-sm";
 
 const WEIGHTS = ["count", "clicks", "impressions", "cost"] as const;
 
@@ -55,7 +60,7 @@ function SortableHead({
   onClick: () => void;
 }) {
   return (
-    <TableHead className={align === "right" ? "text-right" : undefined}>
+    <TableHead className={cn(TABLE_HEAD_STICKY, align === "right" && "text-right")}>
       <button
         type="button"
         onClick={onClick}
@@ -148,6 +153,8 @@ function SearchTermsTable({
           return dir * compareNumbers(a.cost, b.cost);
         case "conversions":
           return dir * compareNumbers(a.conversions, b.conversions);
+        default:
+          return 0;
       }
     });
     return rows;
@@ -223,9 +230,9 @@ function SearchTermsTable({
         </div>
       )}
       <div className="max-h-[480px] overflow-auto rounded-lg border">
-        <Table>
-          <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_hsl(var(--border))]">
-            <TableRow>
+        <Table noScrollContainer>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
               <SortableHead
                 label="Search term"
                 active={sortKey === "searchTerm"}
@@ -338,9 +345,9 @@ function NgramResultView({ result }: { result: NgramAnalysisResult }) {
         {result.params.n.map((n) => (
           <TabsContent key={n} value={String(n)} className="mt-3">
             <div className="max-h-[480px] overflow-auto rounded-lg border">
-              <Table>
-                <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_hsl(var(--border))]">
-                  <TableRow>
+              <Table noScrollContainer>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
                     <SortableHead
                       label="N-gram"
                       active={sortKey === "ngram"}
@@ -402,6 +409,8 @@ function NgramResultView({ result }: { result: NgramAnalysisResult }) {
                           return dir * compareNumbers(a.impressions, b.impressions);
                         case "cost":
                           return dir * compareNumbers(a.cost, b.cost);
+                        default:
+                          return 0;
                       }
                     });
                     return rows;
