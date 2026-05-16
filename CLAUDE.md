@@ -20,12 +20,13 @@ pnpm report [days] [--daily]   # Campaign summary report (default: 30 days)
 pnpm search-terms              # Search terms report
 pnpm ngram-analysis            # N-gram frequency analysis on search terms
 pnpm campaign-keywords         # Keyword list for a campaign
+pnpm change-history            # Account change history (last 30 days)
 ```
 
 ## Architecture
 
 ### What this is
-A Next.js dashboard and CLI toolset for managing and reporting on Google Ads campaigns for muscle fit. The active pages are **Campaigns** (`/dashboard/campaigns`) and **Keyword Analysis** (`/dashboard/keyword-analysis`). Most other sidebar entries are placeholders or legacy stubs.
+A Next.js dashboard and CLI toolset for managing and reporting on Google Ads campaigns for muscle fit. All pages under the **Google Ads** sidebar group are active and backed by real API calls: Campaigns, Keyword Analysis, Ad Groups, Schedule (hour×day heatmap), Devices, Quality Score, and Change History. The **Pages** and **Legacy** sidebar groups are stubs or old v1 dashboards kept for reference.
 
 ### Request flow
 ```
@@ -43,7 +44,8 @@ All server actions return `ActionResult<T> = { ok: true; data: T } | { ok: false
 - **`refresh-token.ts`** — resolves the refresh token: Redis key `ga:oauth:refresh_token` takes priority over `GOOGLE_ADS_REFRESH_TOKEN` env var. Updating via `setGoogleAdsRefreshTokenInCache()` also invalidates the in-memory customer cache.
 - **`oauth.ts`** — PKCE + OAuth2 flow helpers; authorize route is `/api/google-ads/oauth/authorize`, callback is `/api/google-ads/oauth/callback`.
 - **`report.ts`** — campaign summary, daily breakdown (DoD deltas), and demographics (age_range_view / gender_view) reports.
-- **`search-terms.ts`**, **`ngram-analysis.ts`**, **`keyword-analysis.ts`**, **`campaign-keywords.ts`** — additional analysis modules.
+- **`search-terms.ts`**, **`ngram-analysis.ts`**, **`keyword-analysis.ts`**, **`campaign-keywords.ts`** — search term and keyword analysis modules.
+- **`ad-group-report.ts`**, **`device-performance.ts`**, **`quality-score.ts`**, **`schedule-performance.ts`**, **`change-history.ts`** — per-dimension reports matching the sidebar pages of the same name.
 
 All monetary values from the API are in micros; divide by `1_000_000` to get INR (₹).
 
