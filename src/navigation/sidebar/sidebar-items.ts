@@ -1,4 +1,14 @@
-import { Fingerprint, type LucideIcon, Megaphone, TextSearch } from "lucide-react";
+import {
+  Clock,
+  Fingerprint,
+  History,
+  Layers,
+  type LucideIcon,
+  Megaphone,
+  Monitor,
+  Star,
+  TextSearch,
+} from "lucide-react";
 
 export interface NavSubItem {
   title: string;
@@ -39,6 +49,31 @@ export const sidebarItems: NavGroup[] = [
         title: "Keyword analysis",
         url: "/dashboard/keyword-analysis",
         icon: TextSearch,
+      },
+      {
+        title: "Ad groups",
+        url: "/dashboard/ad-groups",
+        icon: Layers,
+      },
+      {
+        title: "Schedule",
+        url: "/dashboard/schedule",
+        icon: Clock,
+      },
+      {
+        title: "Devices",
+        url: "/dashboard/devices",
+        icon: Monitor,
+      },
+      {
+        title: "Quality Score",
+        url: "/dashboard/quality-score",
+        icon: Star,
+      },
+      {
+        title: "Change history",
+        url: "/dashboard/history",
+        icon: History,
       },
     ],
   },

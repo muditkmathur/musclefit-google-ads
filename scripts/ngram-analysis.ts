@@ -2,8 +2,8 @@ import {
   DEFAULT_NGRAM_INPUT,
   DEFAULT_NGRAM_OUTPUT,
   runNgramAnalysisFromFile,
-} from '../src/lib/google-ads/ngram-analysis';
-import type { NgramAnalysisOptions } from '../src/types/google-ads';
+} from "../src/lib/google-ads/ngram-analysis";
+import type { NgramAnalysisOptions } from "../src/types/google-ads";
 
 interface CliArgs extends NgramAnalysisOptions {
   inputPath: string;
@@ -22,65 +22,65 @@ function parseArgs(argv: string[]): CliArgs {
     minTokenLen: 2,
     keepNumbers: false,
     keepStopwords: false,
-    weight: 'count',
+    weight: "count",
     campaign: null,
   };
 
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const raw = argv[i];
-    if (!raw.startsWith('--')) {
+    if (!raw.startsWith("--")) {
       positional.push(raw);
       continue;
     }
 
-    const [k, vMaybe] = raw.slice(2).split('=');
+    const [k, vMaybe] = raw.slice(2).split("=");
     const v = vMaybe ?? argv[i + 1];
 
     switch (k) {
-      case 'input':
+      case "input":
         args.inputPath = String(v);
         if (!vMaybe) i++;
         break;
-      case 'out':
+      case "out":
         args.outputPath = String(v);
         if (!vMaybe) i++;
         break;
-      case 'campaign':
-        args.campaign = String(v ?? '').trim() || null;
+      case "campaign":
+        args.campaign = String(v ?? "").trim() || null;
         if (!vMaybe) i++;
         break;
-      case 'n':
+      case "n":
         args.n = String(v)
-          .split(',')
+          .split(",")
           .map((s) => Number(s.trim()))
           .filter((x) => Number.isFinite(x) && x >= 1 && x <= 5);
         if (!args.n.length) args.n = [1, 2, 3];
         if (!vMaybe) i++;
         break;
-      case 'top':
+      case "top":
         args.top = Math.max(1, Number(v));
         if (!vMaybe) i++;
         break;
-      case 'minCount':
+      case "minCount":
         args.minCount = Math.max(1, Number(v));
         if (!vMaybe) i++;
         break;
-      case 'minTokenLen':
+      case "minTokenLen":
         args.minTokenLen = Math.max(1, Number(v));
         if (!vMaybe) i++;
         break;
-      case 'keepNumbers':
+      case "keepNumbers":
         args.keepNumbers = true;
         break;
-      case 'keepStopwords':
+      case "keepStopwords":
         args.keepStopwords = true;
         break;
-      case 'weight':
-        args.weight = String(v) as NgramAnalysisOptions['weight'];
+      case "weight":
+        args.weight = String(v) as NgramAnalysisOptions["weight"];
         if (!vMaybe) i++;
         break;
-      case 'help':
+      case "help":
         args.help = true;
         break;
       default:
@@ -121,7 +121,7 @@ async function main() {
     return;
   }
   if (args.unknown?.length) {
-    console.error(`Unknown args: ${args.unknown.join(', ')}`);
+    console.error(`Unknown args: ${args.unknown.join(", ")}`);
     console.error(usage());
     process.exit(2);
   }
@@ -143,22 +143,18 @@ async function main() {
     console.log(`✅ Wrote ${args.outputPath}`);
     for (const n of result.params.n) {
       const list = result.ngrams[String(n)] ?? [];
-      console.log(
-        `\nTop ${Math.min(args.top ?? 50, list.length)} ${n}-grams (weight=${result.weight})`,
-      );
+      console.log(`\nTop ${Math.min(args.top ?? 50, list.length)} ${n}-grams (weight=${result.weight})`);
       for (const item of list.slice(0, Math.min(args.top ?? 50, 20))) {
         const score = Number.isFinite(item.score) ? item.score : 0;
-        console.log(
-          `- ${item.ngram}  (count=${item.count}, score=${score.toFixed(2)})`,
-        );
+        console.log(`- ${item.ngram}  (count=${item.count}, score=${score.toFixed(2)})`);
       }
       if (list.length > 20) {
         console.log(`  … and ${list.length - 20} more (see ${args.outputPath})`);
       }
     }
   } catch (err) {
-    const message = err instanceof Error ? err.stack ?? err.message : String(err);
-    console.error('❌ ngram-analysis failed:', message);
+    const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    console.error("❌ ngram-analysis failed:", message);
     process.exit(1);
   }
 }

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm check *)",
+      "Bash(pnpm check:fix)",
+      "Bash(pnpm typecheck *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(pnpm report *)",
+      "Bash(node *)",
+      "Bash(pnpm change-history *)"
+    ]
+  }
+}

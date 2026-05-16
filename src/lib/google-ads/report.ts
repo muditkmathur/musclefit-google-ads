@@ -46,7 +46,7 @@ export function dateRangeForLastNDays(n: number): DateRange {
   return { start: formatYmd(start), end: formatYmd(end) };
 }
 
-function dateRangeForRangeKey(range: CampaignRangeKey): DateRange {
+export function dateRangeForRangeKey(range: CampaignRangeKey): DateRange {
   const end = new Date();
   if (range === "year-to-date") {
     const start = new Date(end.getFullYear(), 0, 1);
@@ -138,12 +138,18 @@ interface CampaignQueryResult {
   totalsRaw: CampaignTotalsRaw;
 }
 
+function parseIsFraction(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? n : null;
+}
+
 async function queryCampaignSummary(
   rangeStart: string,
   rangeEnd: string,
   options: { forceRefresh?: boolean } = {},
 ): Promise<CampaignQueryResult> {
-  const cacheKey = buildCacheKey("report:summary", {
+  const cacheKey = buildCacheKey("report:summary:v2", {
     customerId: getCustomerId(),
     rangeStart,
     rangeEnd,
@@ -171,7 +177,10 @@ async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string
       metrics.cost_micros,
       metrics.conversions,
       metrics.cost_per_conversion,
-      metrics.average_cpc
+      metrics.average_cpc,
+      metrics.search_impression_share,
+      metrics.search_budget_lost_impression_share,
+      metrics.search_rank_lost_impression_share
     FROM campaign
     WHERE ${gaqlDateFilter}
       AND campaign.status = 'ENABLED'
@@ -187,6 +196,9 @@ async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string
     const conv = Number(m.conversions ?? 0);
     const costPerConv = Number(m.cost_per_conversion ?? 0);
 
+    const spendRaw = cost / 1_000_000;
+    const cpaRaw = conv > 0 ? costPerConv / 1_000_000 : 0;
+
     return {
       campaign: String(c.name ?? ""),
       status: String(c.status ?? ""),
@@ -194,9 +206,14 @@ async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string
       clicks: Number(m.clicks ?? 0),
       ctr: `${(ctr * 100).toFixed(2)}%`,
       avg_cpc: `₹${(avgCpc / 1_000_000).toFixed(2)}`,
-      spend: `₹${(cost / 1_000_000).toFixed(2)}`,
+      spend: `₹${spendRaw.toFixed(2)}`,
+      spendRaw,
       conversions: conv,
-      cpa: conv > 0 ? `₹${(costPerConv / 1_000_000).toFixed(2)}` : "N/A",
+      cpa: conv > 0 ? `₹${cpaRaw.toFixed(2)}` : "N/A",
+      cpaRaw,
+      impressionShare: parseIsFraction(m.search_impression_share),
+      lostIsBudget: parseIsFraction(m.search_budget_lost_impression_share),
+      lostIsRank: parseIsFraction(m.search_rank_lost_impression_share),
     };
   });
 
@@ -631,9 +648,14 @@ async function getCampaignDemographicsReport(ctx: DailyContext): Promise<Campaig
     rangeEnd,
     periodLabel,
   });
-  return getOrSetJson<CampaignDemographicsReport>(cacheKey, () => getCampaignDemographicsReportUncached(ctx), undefined, {
-    forceRefresh: forceRefresh === true,
-  });
+  return getOrSetJson<CampaignDemographicsReport>(
+    cacheKey,
+    () => getCampaignDemographicsReportUncached(ctx),
+    undefined,
+    {
+      forceRefresh: forceRefresh === true,
+    },
+  );
 }
 
 interface RawDemographicRow {

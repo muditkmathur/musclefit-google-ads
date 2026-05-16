@@ -4,7 +4,7 @@ import type { NgramAnalysisOptions, NgramAnalysisResult, SearchTermsReport } fro
 
 import { getCustomerId } from "./client";
 import { analyzeNgrams } from "./ngram-analysis";
-import { runSearchTermsReport } from "./search-terms";
+import { fetchSearchTermsReport } from "./search-terms";
 
 export interface KeywordAnalysisBundle {
   searchTerms: SearchTermsReport;
@@ -26,21 +26,21 @@ export async function runKeywordAnalysisBundle(options: RunKeywordAnalysisOption
     campaign: campaignFilter,
   };
 
-  const cacheKey = buildCacheKey("keyword-analysis-bundle", {
+  const cacheKey = buildCacheKey("keyword-analysis-bundle:v2", {
     customerId: getCustomerId(),
     monthsBack,
     campaignFilter,
     ngramOptions,
   });
 
-  return getOrSetJson<KeywordAnalysisBundle>(cacheKey, async () => {
-    const searchTerms = await runSearchTermsReport({
-      monthsBack,
-      campaign: campaignFilter,
-      forceRefresh: options.forceRefresh === true,
-    });
-    const ngrams = analyzeNgrams({ rows: searchTerms.rows, options: ngramOptions });
-    return { searchTerms, ngrams };
-  }, CACHE_TTL_SECONDS, { forceRefresh: options.forceRefresh === true });
+  return getOrSetJson<KeywordAnalysisBundle>(
+    cacheKey,
+    async () => {
+      const searchTerms = await fetchSearchTermsReport(monthsBack, campaignFilter);
+      const ngrams = analyzeNgrams({ rows: searchTerms.rows, options: ngramOptions });
+      return { searchTerms, ngrams };
+    },
+    CACHE_TTL_SECONDS,
+    { forceRefresh: options.forceRefresh === true },
+  );
 }
-

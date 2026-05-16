@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
-import { RefreshCw, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, Copy, RefreshCw } from "lucide-react";
 
 import { getKeywordAnalysisBundle } from "@/app/actions/google-ads";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -123,14 +123,7 @@ function SearchTermsTable({
     } satisfies SearchTermsReport;
   }, [onlyConversions, report, selectedCampaigns]);
 
-  type SearchTermsSortKey =
-    | "searchTerm"
-    | "campaign"
-    | "clicks"
-    | "impressions"
-    | "ctr"
-    | "cost"
-    | "conversions";
+  type SearchTermsSortKey = "searchTerm" | "campaign" | "clicks" | "impressions" | "ctr" | "cost" | "conversions";
   const [sortKey, setSortKey] = useState<SearchTermsSortKey>("clicks");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -284,9 +277,7 @@ function SearchTermsTable({
           </TableHeader>
           <TableBody>
             {sortedRows.slice(0, 200).map((r) => (
-              <TableRow
-                key={`${r.searchTerm}|${r.campaign}|${r.adGroup}|${r.clicks}|${r.impressions}|${r.costMicros}`}
-              >
+              <TableRow key={`${r.searchTerm}|${r.campaign}|${r.adGroup}|${r.clicks}|${r.impressions}|${r.costMicros}`}>
                 <TableCell>{r.searchTerm}</TableCell>
                 <TableCell>{r.campaign}</TableCell>
                 <TableCell className="text-right">{r.clicks.toLocaleString()}</TableCell>
@@ -300,17 +291,74 @@ function SearchTermsTable({
         </Table>
       </div>
       {filteredReport.rows.length > 200 && (
-        <p className="mt-2 text-muted-foreground text-xs">
-          Showing first 200 of {filteredReport.rows.length} rows.
-        </p>
+        <p className="mt-2 text-muted-foreground text-xs">Showing first 200 of {filteredReport.rows.length} rows.</p>
       )}
     </div>
   );
 }
 
+function CopyNegativesButton({ ngrams }: { ngrams: Array<{ ngram: string }> }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    const text = ngrams.map((r) => `"${r.ngram}"`).join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback: select a temporary textarea
+      const el = document.createElement("textarea");
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={() => void handleCopy()}
+      className="h-7 gap-1 text-xs"
+      title='Copy all visible n-grams as phrase-match negative keywords ("term" format)'
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {copied ? "Copied!" : "Copy as negatives"}
+    </Button>
+  );
+}
+
+type NgramSortKey =
+  | "ngram"
+  | "count"
+  | "score"
+  | "clicks"
+  | "impressions"
+  | "cost"
+  | "conversions"
+  | "ctr"
+  | "convRate";
+
+function ctrColor(ctr: number): string {
+  if (ctr >= 0.1) return "text-green-600 dark:text-green-400";
+  if (ctr >= 0.05) return "text-amber-600 dark:text-amber-400";
+  return "text-destructive";
+}
+
+function convRateColor(convRate: number): string {
+  if (convRate >= 0.05) return "text-green-600 dark:text-green-400";
+  if (convRate >= 0.01) return "text-amber-600 dark:text-amber-400";
+  return convRate === 0 ? "text-muted-foreground" : "";
+}
+
 function NgramResultView({ result }: { result: NgramAnalysisResult }) {
   const [tab, setTab] = useState<string>(String(result.params.n[0] ?? 1));
-  type NgramSortKey = "ngram" | "count" | "score" | "clicks" | "impressions" | "cost";
   const [sortKey, setSortKey] = useState<NgramSortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -328,6 +376,36 @@ function NgramResultView({ result }: { result: NgramAnalysisResult }) {
     setSortDir(key === "ngram" ? "asc" : "desc");
   };
 
+  const sortedRows = useMemo(() => {
+    const rows = [...(result.ngrams[tab] ?? [])];
+    const dir = sortDir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      switch (sortKey) {
+        case "ngram":
+          return dir * compareStrings(a.ngram, b.ngram);
+        case "count":
+          return dir * compareNumbers(a.count, b.count);
+        case "score":
+          return dir * compareNumbers(a.score, b.score);
+        case "clicks":
+          return dir * compareNumbers(a.clicks, b.clicks);
+        case "impressions":
+          return dir * compareNumbers(a.impressions, b.impressions);
+        case "cost":
+          return dir * compareNumbers(a.cost, b.cost);
+        case "conversions":
+          return dir * compareNumbers(a.conversions, b.conversions);
+        case "ctr":
+          return dir * compareNumbers(a.ctr, b.ctr);
+        case "convRate":
+          return dir * compareNumbers(a.convRate, b.convRate);
+        default:
+          return 0;
+      }
+    });
+    return rows;
+  }, [result.ngrams, tab, sortKey, sortDir]);
+
   return (
     <div>
       <p className="mb-2 text-muted-foreground text-sm">
@@ -335,15 +413,28 @@ function NgramResultView({ result }: { result: NgramAnalysisResult }) {
         {result.campaign ? ` · filter: "${result.campaign}"` : ""}
       </p>
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="h-auto w-full flex-wrap justify-start overflow-x-auto">
-          {result.params.n.map((n) => (
-            <TabsTrigger key={n} value={String(n)} className="text-xs">
-              {n}-gram
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="flex flex-wrap items-center gap-2">
+          <TabsList className="h-auto flex-wrap justify-start overflow-x-auto">
+            {result.params.n.map((n) => (
+              <TabsTrigger key={n} value={String(n)} className="text-xs">
+                {n}-gram
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          <CopyNegativesButton ngrams={result.ngrams[tab] ?? []} />
+        </div>
         {result.params.n.map((n) => (
           <TabsContent key={n} value={String(n)} className="mt-3">
+            <div className="mb-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+              <span>
+                <span className="text-green-600 dark:text-green-400 font-medium">Conv. rate</span>: ≥5% good · 1–5% ok ·
+                0% candidate for negative
+              </span>
+              <span>
+                <span className="text-green-600 dark:text-green-400 font-medium">CTR</span>: ≥10% good · 5–10% ok ·
+                &lt;5% low
+              </span>
+            </div>
             <div className="max-h-[480px] overflow-auto rounded-lg border">
               <Table noScrollContainer>
                 <TableHeader>
@@ -383,38 +474,37 @@ function NgramResultView({ result }: { result: NgramAnalysisResult }) {
                       onClick={() => toggleSort("impressions")}
                     />
                     <SortableHead
+                      label="CTR"
+                      align="right"
+                      active={sortKey === "ctr"}
+                      dir={sortDir}
+                      onClick={() => toggleSort("ctr")}
+                    />
+                    <SortableHead
                       label="Cost"
                       align="right"
                       active={sortKey === "cost"}
                       dir={sortDir}
                       onClick={() => toggleSort("cost")}
                     />
+                    <SortableHead
+                      label="Conv."
+                      align="right"
+                      active={sortKey === "conversions"}
+                      dir={sortDir}
+                      onClick={() => toggleSort("conversions")}
+                    />
+                    <SortableHead
+                      label="Conv. rate"
+                      align="right"
+                      active={sortKey === "convRate"}
+                      dir={sortDir}
+                      onClick={() => toggleSort("convRate")}
+                    />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(() => {
-                    const rows = [...(result.ngrams[String(n)] ?? [])];
-                    const dir = sortDir === "asc" ? 1 : -1;
-                    rows.sort((a, b) => {
-                      switch (sortKey) {
-                        case "ngram":
-                          return dir * compareStrings(a.ngram, b.ngram);
-                        case "count":
-                          return dir * compareNumbers(a.count, b.count);
-                        case "score":
-                          return dir * compareNumbers(a.score, b.score);
-                        case "clicks":
-                          return dir * compareNumbers(a.clicks, b.clicks);
-                        case "impressions":
-                          return dir * compareNumbers(a.impressions, b.impressions);
-                        case "cost":
-                          return dir * compareNumbers(a.cost, b.cost);
-                        default:
-                          return 0;
-                      }
-                    });
-                    return rows;
-                  })().map((row) => (
+                  {sortedRows.map((row) => (
                     <TableRow key={`${n}:${row.ngram}`}>
                       <TableCell className="font-medium">{row.ngram}</TableCell>
                       <TableCell className="text-right">{row.count}</TableCell>
@@ -423,7 +513,14 @@ function NgramResultView({ result }: { result: NgramAnalysisResult }) {
                       </TableCell>
                       <TableCell className="text-right">{row.clicks.toLocaleString()}</TableCell>
                       <TableCell className="text-right">{row.impressions.toLocaleString()}</TableCell>
+                      <TableCell className={cn("text-right tabular-nums", ctrColor(row.ctr))}>
+                        {(row.ctr * 100).toFixed(1)}%
+                      </TableCell>
                       <TableCell className="text-right">₹{row.cost.toFixed(2)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{row.conversions.toLocaleString()}</TableCell>
+                      <TableCell className={cn("text-right tabular-nums", convRateColor(row.convRate))}>
+                        {row.clicks > 0 ? `${(row.convRate * 100).toFixed(1)}%` : "—"}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -558,7 +655,9 @@ function KeywordAnalysisCardContent() {
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <div className="min-w-0 flex-1">
                     <CardTitle>N-gram analysis</CardTitle>
-                    <CardDescription>Configure scoring and view top n-grams from the fetched search-term data.</CardDescription>
+                    <CardDescription>
+                      Configure scoring and view top n-grams from the fetched search-term data.
+                    </CardDescription>
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
@@ -617,4 +716,3 @@ export function KeywordAnalysisCard() {
     </Suspense>
   );
 }
-

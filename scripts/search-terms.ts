@@ -1,8 +1,5 @@
-import 'dotenv/config';
-import {
-  DEFAULT_SEARCH_TERMS_OUTPUT,
-  runSearchTermsReport,
-} from '../src/lib/google-ads/search-terms';
+import "dotenv/config";
+import { DEFAULT_SEARCH_TERMS_OUTPUT, runSearchTermsReport } from "../src/lib/google-ads/search-terms";
 
 async function main() {
   const campaignFilter = process.argv[2] ?? null;
@@ -14,13 +11,11 @@ async function main() {
     });
 
     if (!result.rows.length) {
-      console.log('No search terms found for today yet.');
+      console.log("No search terms found for today yet.");
       return;
     }
 
-    console.log(
-      `\n📊 Search Terms Report — ${result.dateRange.start} to ${result.dateRange.end}`,
-    );
+    console.log(`\n📊 Search Terms Report — ${result.dateRange.start} to ${result.dateRange.end}`);
     if (result.campaignFilter) {
       console.log(`   Filtered by campaign: "${result.campaignFilter}"`);
     }
@@ -28,21 +23,21 @@ async function main() {
 
     console.table(
       result.rows.map((r) => ({
-        'Search Term': r.searchTerm,
+        "Search Term": r.searchTerm,
         Status: r.status,
         Campaign: r.campaign,
-        'Ad Group': r.adGroup,
+        "Ad Group": r.adGroup,
         Clicks: r.clicks,
         Impressions: r.impressions,
-        CTR: (r.ctr * 100).toFixed(2) + '%',
-        'Cost (₹)': r.cost.toFixed(2),
+        CTR: (r.ctr * 100).toFixed(2) + "%",
+        "Cost (₹)": r.cost.toFixed(2),
         Conversions: r.conversions,
-        'Conv. value': r.conversionValue,
+        "Conv. value": r.conversionValue,
       })),
     );
 
     console.log(`✅ Wrote full output to ${DEFAULT_SEARCH_TERMS_OUTPUT}`);
-    console.log('\n─── Summary ───────────────────────────────');
+    console.log("\n─── Summary ───────────────────────────────");
     console.log(`Total Clicks:      ${result.summary.totalClicks}`);
     console.log(`Total Impressions: ${result.summary.totalImpressions}`);
     console.log(
@@ -54,13 +49,11 @@ async function main() {
     );
     console.log(`Total Cost:        ₹${result.summary.totalCost.toFixed(2)}`);
     console.log(`Total Conversions: ${result.summary.totalConversions}`);
-    console.log(
-      `Total Conv. value: ${result.summary.totalConversionValue.toFixed(2)}`,
-    );
-    console.log('───────────────────────────────────────────\n');
+    console.log(`Total Conv. value: ${result.summary.totalConversionValue.toFixed(2)}`);
+    console.log("───────────────────────────────────────────\n");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('❌ Error fetching search terms:', message);
+    console.error("❌ Error fetching search terms:", message);
     process.exit(1);
   }
 }

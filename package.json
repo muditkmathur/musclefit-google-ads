@@ -18,7 +18,8 @@
     "report": "tsx scripts/report.ts",
     "search-terms": "tsx scripts/search-terms.ts",
     "ngram-analysis": "tsx scripts/ngram-analysis.ts",
-    "campaign-keywords": "tsx scripts/campaign-keywords.ts"
+    "campaign-keywords": "tsx scripts/campaign-keywords.ts",
+    "change-history": "tsx scripts/change-history.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

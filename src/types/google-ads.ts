@@ -16,8 +16,13 @@ export interface CampaignSummaryRow {
   ctr: string;
   avg_cpc: string;
   spend: string;
+  spendRaw: number;
   conversions: number;
   cpa: string;
+  cpaRaw: number;
+  impressionShare: number | null;
+  lostIsBudget: number | null;
+  lostIsRank: number | null;
 }
 
 export interface CampaignTotals {
@@ -162,6 +167,9 @@ export interface NgramItem {
   clicks: number;
   impressions: number;
   cost: number;
+  conversions: number;
+  ctr: number;
+  convRate: number;
 }
 
 export interface NgramAnalysisOptions {
@@ -215,4 +223,141 @@ export interface CampaignKeywordsReport {
   positives: CampaignKeywordRow[];
   campaignNegatives: CampaignKeywordRow[];
   adGroupNegatives: CampaignKeywordRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Quality Score
+// ---------------------------------------------------------------------------
+
+export type QualityScoreComponent = "ABOVE_AVERAGE" | "AVERAGE" | "BELOW_AVERAGE" | "UNKNOWN";
+
+export type QualityScoreBottleneck = "bid" | "qs" | "both" | "competitive" | "unknown";
+
+export interface QualityScoreRow {
+  campaign: string;
+  adGroup: string;
+  keyword: string;
+  matchType: string;
+  status: string;
+  qualityScore: number | null;
+  expectedCtr: QualityScoreComponent;
+  adRelevance: QualityScoreComponent;
+  landingPageExperience: QualityScoreComponent;
+  avgCpc: number;
+  maxCpcBid: number | null;
+  firstPageCpc: number | null;
+  topOfPageCpc: number | null;
+  bottleneck: QualityScoreBottleneck;
+  impressions: number;
+  clicks: number;
+  spend: number;
+  conversions: number;
+}
+
+export interface QualityScoreReport {
+  generatedAt: string;
+  dateRange: DateRange;
+  rows: QualityScoreRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Change history
+// ---------------------------------------------------------------------------
+
+export interface ChangeEvent {
+  changeDateTime: string;
+  resourceType: string;
+  resourceTypeLabel: string;
+  operation: "CREATE" | "UPDATE" | "REMOVE" | "UNKNOWN";
+  changedFields: string[];
+  clientType: string;
+  clientTypeLabel: string;
+  userEmail: string;
+  campaignName: string;
+  adGroupName: string;
+  summary: string;
+  budgetOld: number | null;
+  budgetNew: number | null;
+  statusOld: string | null;
+  statusNew: string | null;
+  keywordText: string | null;
+  keywordMatchType: string | null;
+  bidOld: number | null;
+  bidNew: number | null;
+}
+
+export interface ChangeHistoryReport {
+  generatedAt: string;
+  dateRange: DateRange;
+  events: ChangeEvent[];
+}
+
+// ---------------------------------------------------------------------------
+// Schedule performance (hour × day-of-week heatmap)
+// ---------------------------------------------------------------------------
+
+export type DayOfWeek = "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+
+export interface ScheduleCell {
+  dayOfWeek: DayOfWeek;
+  hour: number;
+  impressions: number;
+  clicks: number;
+  spend: number;
+  conversions: number;
+  ctr: number;
+}
+
+export interface SchedulePerformanceReport {
+  generatedAt: string;
+  dateRange: DateRange;
+  cells: ScheduleCell[];
+}
+
+// ---------------------------------------------------------------------------
+// Ad group report
+// ---------------------------------------------------------------------------
+
+export interface AdGroupRow {
+  campaign: string;
+  adGroup: string;
+  impressions: number;
+  clicks: number;
+  ctr: string;
+  avgCpc: string;
+  spend: string;
+  spendRaw: number;
+  conversions: number;
+  cpa: string;
+  cpaRaw: number;
+  impressionShare: number | null;
+  lostIsBudget: number | null;
+  lostIsRank: number | null;
+}
+
+export interface AdGroupReport {
+  generatedAt: string;
+  dateRange: DateRange;
+  rows: AdGroupRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Device performance
+// ---------------------------------------------------------------------------
+
+export interface DeviceRow {
+  device: string;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  spend: number;
+  conversions: number;
+  cpa: number;
+  avgCpc: number;
+}
+
+export interface DevicePerformanceReport {
+  generatedAt: string;
+  dateRange: DateRange;
+  rows: DeviceRow[];
 }

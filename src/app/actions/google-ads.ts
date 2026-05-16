@@ -1,43 +1,40 @@
 "use server";
 
+import { runAdGroupReport } from "@/lib/google-ads/ad-group-report";
 import { runCampaignKeywords } from "@/lib/google-ads/campaign-keywords";
+import { runChangeHistory } from "@/lib/google-ads/change-history";
+import { runDevicePerformance } from "@/lib/google-ads/device-performance";
 import { runKeywordAnalysisBundle } from "@/lib/google-ads/keyword-analysis";
 import { analyzeNgrams } from "@/lib/google-ads/ngram-analysis";
+import { runQualityScore } from "@/lib/google-ads/quality-score";
 import { runCampaignReport } from "@/lib/google-ads/report";
+import { runSchedulePerformance } from "@/lib/google-ads/schedule-performance";
 import { runSearchTermsReport } from "@/lib/google-ads/search-terms";
 import type {
+  AdGroupReport,
   CampaignGranularity,
   CampaignKeywordsReport,
   CampaignRangeKey,
   CampaignReport,
+  ChangeHistoryReport,
+  DevicePerformanceReport,
   KeywordAnalysisBundle,
   NgramAnalysisOptions,
   NgramAnalysisResult,
+  QualityScoreReport,
+  SchedulePerformanceReport,
   SearchTermRow,
   SearchTermsReport,
 } from "@/types/google-ads";
 
-const VALID_RANGES: readonly CampaignRangeKey[] = [
-  "last-7-days",
-  "last-4-weeks",
-  "last-3-months",
-  "year-to-date",
-];
+const VALID_RANGES: readonly CampaignRangeKey[] = ["last-7-days", "last-4-weeks", "last-3-months", "year-to-date"];
 
-const VALID_GRANULARITIES: readonly CampaignGranularity[] = [
-  "day",
-  "week",
-  "month",
-];
+const VALID_GRANULARITIES: readonly CampaignGranularity[] = ["day", "week", "month"];
 
-export type ActionResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
+export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : null;
+  return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
 function oauthErrorFromUnknown(err: unknown): { code?: string; description?: string } {
@@ -45,8 +42,7 @@ function oauthErrorFromUnknown(err: unknown): { code?: string; description?: str
   const response = asRecord(errorObj?.response);
   const data = asRecord(response?.data);
   const code = typeof data?.error === "string" ? data.error : undefined;
-  const description =
-    typeof data?.error_description === "string" ? data.error_description : undefined;
+  const description = typeof data?.error_description === "string" ? data.error_description : undefined;
   return { code, description };
 }
 
@@ -101,18 +97,12 @@ export interface CampaignReportActionInput {
   forceRefresh?: boolean;
 }
 
-export async function getCampaignReport(
-  input: CampaignReportActionInput = {},
-): Promise<ActionResult<CampaignReport>> {
+export async function getCampaignReport(input: CampaignReportActionInput = {}): Promise<ActionResult<CampaignReport>> {
   try {
-    const range: CampaignRangeKey = VALID_RANGES.includes(
-      input.range as CampaignRangeKey,
-    )
+    const range: CampaignRangeKey = VALID_RANGES.includes(input.range as CampaignRangeKey)
       ? (input.range as CampaignRangeKey)
       : "last-4-weeks";
-    const granularity: CampaignGranularity = VALID_GRANULARITIES.includes(
-      input.granularity as CampaignGranularity,
-    )
+    const granularity: CampaignGranularity = VALID_GRANULARITIES.includes(input.granularity as CampaignGranularity)
       ? (input.granularity as CampaignGranularity)
       : "day";
 
@@ -200,6 +190,103 @@ export async function getCampaignKeywords(
       };
     }
     const data = await runCampaignKeywords({ campaignId, campaignName });
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface QualityScoreActionInput {
+  range?: CampaignRangeKey;
+  forceRefresh?: boolean;
+}
+
+export async function getQualityScore(input: QualityScoreActionInput = {}): Promise<ActionResult<QualityScoreReport>> {
+  try {
+    const range: CampaignRangeKey = VALID_RANGES.includes(input.range as CampaignRangeKey)
+      ? (input.range as CampaignRangeKey)
+      : "last-4-weeks";
+    const data = await runQualityScore({ range, forceRefresh: Boolean(input.forceRefresh) });
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface ChangeHistoryActionInput {
+  days?: number;
+  forceRefresh?: boolean;
+}
+
+export async function getChangeHistory(
+  input: ChangeHistoryActionInput = {},
+): Promise<ActionResult<ChangeHistoryReport>> {
+  try {
+    const days = Number(input.days);
+    const data = await runChangeHistory({
+      days: Number.isFinite(days) && days > 0 ? Math.min(days, 30) : 30,
+      forceRefresh: Boolean(input.forceRefresh),
+    });
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface SchedulePerformanceActionInput {
+  range?: CampaignRangeKey;
+  forceRefresh?: boolean;
+}
+
+export async function getSchedulePerformance(
+  input: SchedulePerformanceActionInput = {},
+): Promise<ActionResult<SchedulePerformanceReport>> {
+  try {
+    const range: CampaignRangeKey = VALID_RANGES.includes(input.range as CampaignRangeKey)
+      ? (input.range as CampaignRangeKey)
+      : "last-4-weeks";
+    const data = await runSchedulePerformance({ range, forceRefresh: Boolean(input.forceRefresh) });
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface AdGroupReportActionInput {
+  range?: CampaignRangeKey;
+  forceRefresh?: boolean;
+}
+
+export async function getAdGroupReport(input: AdGroupReportActionInput = {}): Promise<ActionResult<AdGroupReport>> {
+  try {
+    const range: CampaignRangeKey = VALID_RANGES.includes(input.range as CampaignRangeKey)
+      ? (input.range as CampaignRangeKey)
+      : "last-4-weeks";
+    const data = await runAdGroupReport({ range, forceRefresh: Boolean(input.forceRefresh) });
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface DevicePerformanceActionInput {
+  range?: CampaignRangeKey;
+  forceRefresh?: boolean;
+}
+
+export async function getDevicePerformance(
+  input: DevicePerformanceActionInput = {},
+): Promise<ActionResult<DevicePerformanceReport>> {
+  try {
+    const range: CampaignRangeKey = VALID_RANGES.includes(input.range as CampaignRangeKey)
+      ? (input.range as CampaignRangeKey)
+      : "last-4-weeks";
+    const data = await runDevicePerformance({ range, forceRefresh: Boolean(input.forceRefresh) });
     return { ok: true, data };
   } catch (err) {
     console.error(err);

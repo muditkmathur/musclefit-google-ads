@@ -1,10 +1,6 @@
 import { buildCacheKey, getOrSetJson } from "@/lib/cache/query-cache";
 import { CACHE_TTL_SECONDS } from "@/lib/cache/redis";
-import type {
-  DateRange,
-  SearchTermRow,
-  SearchTermsReport,
-} from "@/types/google-ads";
+import type { DateRange, SearchTermRow, SearchTermsReport } from "@/types/google-ads";
 
 import { getCustomer, getCustomerId } from "./client";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -24,9 +20,7 @@ export interface RunSearchTermsOptions {
   forceRefresh?: boolean;
 }
 
-export async function runSearchTermsReport(
-  options: RunSearchTermsOptions = {},
-): Promise<SearchTermsReport> {
+export async function runSearchTermsReport(options: RunSearchTermsOptions = {}): Promise<SearchTermsReport> {
   const monthsBack = Math.max(1, Math.floor(options.monthsBack ?? 3));
   const campaignFilter = options.campaign?.trim() || null;
 
@@ -45,17 +39,13 @@ export async function runSearchTermsReport(
 
   if (options.saveToPath) {
     await mkdir(dirname(options.saveToPath), { recursive: true });
-    await writeFile(
-      options.saveToPath,
-      JSON.stringify(result, null, 2),
-      "utf8",
-    );
+    await writeFile(options.saveToPath, JSON.stringify(result, null, 2), "utf8");
   }
 
   return result;
 }
 
-async function fetchSearchTermsReport(
+export async function fetchSearchTermsReport(
   monthsBack: number,
   campaignFilter: string | null,
 ): Promise<SearchTermsReport> {
@@ -97,9 +87,7 @@ async function fetchSearchTermsReport(
     const conversionValue = Number(
       // Google Ads API surfaces both conversions_value and all_conversions_value. Some accounts/actions
       // only populate one of them depending on attribution & settings.
-      (m as Record<string, unknown>).conversions_value ??
-        (m as Record<string, unknown>).all_conversions_value ??
-        0,
+      (m as Record<string, unknown>).conversions_value ?? (m as Record<string, unknown>).all_conversions_value ?? 0,
     );
     return {
       searchTerm: String(r.search_term_view?.search_term ?? ""),
@@ -139,8 +127,4 @@ async function fetchSearchTermsReport(
   };
 }
 
-export const DEFAULT_SEARCH_TERMS_OUTPUT = join(
-  process.cwd(),
-  "data",
-  "output.json",
-);
+export const DEFAULT_SEARCH_TERMS_OUTPUT = join(process.cwd(), "data", "output.json");

@@ -13,10 +13,155 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import type { CampaignGranularity, CampaignRangeKey, CampaignReport } from "@/types/google-ads";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
+import type { CampaignGranularity, CampaignRangeKey, CampaignReport, CampaignSummaryRow } from "@/types/google-ads";
 
 import { CampaignDailyReportSection } from "./campaign-daily-report";
 import { CampaignKpiStrip } from "./campaign-kpi-strip";
+
+/**
+ * IS stacked bar: green = impressions won, amber = lost to budget, red = lost to rank.
+ * Shows at a glance where you're losing and why.
+ */
+function IsBar({
+  is,
+  lostBudget,
+  lostRank,
+}: {
+  is: number | null;
+  lostBudget: number | null;
+  lostRank: number | null;
+}) {
+  const won = is ?? 0;
+  const budget = lostBudget ?? 0;
+  const rank = lostRank ?? 0;
+
+  const wonPct = (won * 100).toFixed(0);
+  const budgetPct = (budget * 100).toFixed(0);
+  const rankPct = (rank * 100).toFixed(0);
+
+  const tooltip =
+    is === null
+      ? "No Impression Share data (non-search campaign)"
+      : `Won: ${wonPct}% · Lost to budget: ${budgetPct}% · Lost to rank (QS/bid): ${rankPct}%`;
+
+  if (is === null) {
+    return (
+      <TableCell className="text-muted-foreground text-xs" colSpan={1}>
+        N/A
+      </TableCell>
+    );
+  }
+
+  const isColor =
+    won >= 0.7
+      ? "bg-green-500 dark:bg-green-600"
+      : won >= 0.4
+        ? "bg-amber-400 dark:bg-amber-500"
+        : "bg-red-500 dark:bg-red-600";
+
+  return (
+    <TableCell title={tooltip}>
+      <div className="flex min-w-[120px] flex-col gap-1">
+        <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+          <div className={cn("h-full", isColor)} style={{ width: `${won * 100}%` }} />
+          <div className="h-full bg-amber-300 dark:bg-amber-500/70" style={{ width: `${budget * 100}%` }} />
+          <div className="h-full bg-destructive/70" style={{ width: `${rank * 100}%` }} />
+        </div>
+        <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground">
+          <span className="text-foreground font-medium">{wonPct}% won</span>
+          {budget > 0.01 && <span className="text-amber-600 dark:text-amber-400">{budgetPct}% budget</span>}
+          {rank > 0.01 && <span className="text-destructive">{rankPct}% rank</span>}
+        </div>
+      </div>
+    </TableCell>
+  );
+}
+
+type CampaignSortKey = keyof CampaignSummaryRow;
+type CampaignSortDir = "asc" | "desc";
+
+function CampaignSortableTh({
+  label,
+  col,
+  sortKey,
+  sortDir,
+  onToggle,
+}: {
+  label: string;
+  col: CampaignSortKey;
+  sortKey: CampaignSortKey;
+  sortDir: CampaignSortDir;
+  onToggle: (col: CampaignSortKey) => void;
+}) {
+  return (
+    <TableHead className="cursor-pointer select-none text-right whitespace-nowrap" onClick={() => onToggle(col)}>
+      {label} {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : ""}
+    </TableHead>
+  );
+}
+
+function CampaignsSummaryTable({ campaigns }: { campaigns: CampaignSummaryRow[] }) {
+  const [sortKey, setSortKey] = useState<CampaignSortKey>("spendRaw");
+  const [sortDir, setSortDir] = useState<CampaignSortDir>("desc");
+
+  const sorted = [...campaigns].sort((a, b) => {
+    const av = a[sortKey];
+    const bv = b[sortKey];
+    const cmp =
+      typeof av === "number" && typeof bv === "number" ? av - bv : String(av ?? "").localeCompare(String(bv ?? ""));
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  const toggle = (key: keyof CampaignSummaryRow) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  return (
+    <div className="overflow-auto rounded-lg border">
+      <Table noScrollContainer>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="cursor-pointer select-none" onClick={() => toggle("campaign")}>
+              Campaign {sortKey === "campaign" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+            </TableHead>
+            <CampaignSortableTh label="Spend" col="spendRaw" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+            <CampaignSortableTh label="Clicks" col="clicks" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+            <CampaignSortableTh label="Conv." col="conversions" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+            <CampaignSortableTh label="CPA" col="cpaRaw" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+            <TableHead
+              className="cursor-pointer select-none whitespace-nowrap"
+              onClick={() => toggle("impressionShare")}
+              title="Impression Share: how often your ad showed vs. how often it was eligible. Bar shows: green = won, amber = lost to budget, red = lost to Quality Score / bid rank."
+            >
+              Impression Share{sortKey === "impressionShare" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sorted.map((row) => (
+            <TableRow key={row.campaign}>
+              <TableCell className="max-w-[200px] truncate font-medium" title={row.campaign}>
+                {row.campaign}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">{row.spend}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.clicks.toLocaleString()}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.conversions.toLocaleString()}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.cpa}</TableCell>
+              <IsBar is={row.impressionShare} lostBudget={row.lostIsBudget} lostRank={row.lostIsRank} />
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
 
 const RANGE_OPTIONS: ReadonlyArray<{ value: CampaignRangeKey; label: string }> = [
   { value: "last-7-days", label: "Last 7 days" },
@@ -216,6 +361,19 @@ function CampaignReportCardContent() {
           rangeLabel={currentLabel}
           loading={loading && !report}
         />
+
+        {report?.campaigns && report.campaigns.length > 0 && (
+          <div>
+            <p className="mb-2 text-muted-foreground text-xs">
+              <strong>Impression Share</strong> = how often your ad showed vs. how often it was eligible to show. Bar:{" "}
+              <span className="text-green-600 dark:text-green-400">green = won</span> ·{" "}
+              <span className="text-amber-600 dark:text-amber-400">amber = lost because daily budget ran out</span> ·{" "}
+              <span className="text-destructive">red = lost because Quality Score or bid was too low</span>. Hover any
+              bar for exact numbers.
+            </p>
+            <CampaignsSummaryTable campaigns={report.campaigns} />
+          </div>
+        )}
 
         {report?.daily && (
           <CampaignDailyReportSection
