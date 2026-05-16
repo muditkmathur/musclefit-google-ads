@@ -23,7 +23,16 @@ import type {
   DemographicDimension,
 } from "@/types/google-ads";
 
-type MetricKey = "spend" | "impressions" | "clicks" | "conversions" | "ctr" | "avg_cpc";
+type MetricKey =
+  | "spend"
+  | "impressions"
+  | "clicks"
+  | "conversions"
+  | "ctr"
+  | "avg_cpc"
+  | "impression_share"
+  | "lost_is_budget"
+  | "lost_is_rank";
 type UnitGroup = "count" | "currency" | "percent";
 type ChartType = "bar" | "line";
 type View = "daily" | "demographics";
@@ -91,7 +100,7 @@ interface MetricSpec {
   aggregation: "sum" | "avg";
 }
 
-const METRICS: readonly MetricSpec[] = [
+const CORE_METRICS: readonly MetricSpec[] = [
   {
     key: "spend",
     label: "Spend",
@@ -141,6 +150,43 @@ const METRICS: readonly MetricSpec[] = [
     aggregation: "avg",
   },
 ];
+
+/** Matches Campaigns table IS bar: won · budget loss · rank loss */
+const IMPRESSION_SHARE_METRICS: readonly MetricSpec[] = [
+  {
+    key: "impression_share",
+    label: "Impression share",
+    unit: "percent",
+    color: "#22c55e",
+    format: (v) => `${v.toFixed(1)}%`,
+    aggregation: "avg",
+  },
+  {
+    key: "lost_is_budget",
+    label: "Lost IS (budget)",
+    unit: "percent",
+    color: "#fbbf24",
+    format: (v) => `${v.toFixed(1)}%`,
+    aggregation: "avg",
+  },
+  {
+    key: "lost_is_rank",
+    label: "Lost IS (rank)",
+    unit: "percent",
+    color: "#ef4444",
+    format: (v) => `${v.toFixed(1)}%`,
+    aggregation: "avg",
+  },
+];
+
+const METRICS: readonly MetricSpec[] = [...CORE_METRICS, ...IMPRESSION_SHARE_METRICS];
+
+const IMPRESSION_SHARE_METRIC_KEYS = new Set<MetricKey>(["impression_share", "lost_is_budget", "lost_is_rank"]);
+
+const DEMOGRAPHICS_METRICS = METRICS.filter((m) => !IMPRESSION_SHARE_METRIC_KEYS.has(m.key));
+
+const DAILY_METRIC_GROUP_LABEL_CLASS =
+  "text-muted-foreground flex w-full basis-full pt-1 font-medium text-[10px] uppercase tracking-wide";
 
 const METRIC_BY_KEY: Record<MetricKey, MetricSpec> = METRICS.reduce(
   (acc, m) => {
@@ -452,6 +498,12 @@ function readMetric(entry: CampaignDailyEntry, key: MetricKey): number {
       return entry.ctr ?? 0;
     case "avg_cpc":
       return entry.avg_cpc;
+    case "impression_share":
+      return (entry.impressionShare ?? 0) * 100;
+    case "lost_is_budget":
+      return (entry.lostIsBudget ?? 0) * 100;
+    case "lost_is_rank":
+      return (entry.lostIsRank ?? 0) * 100;
   }
 }
 
@@ -692,7 +744,18 @@ function CombinedDailyView({ daily, granularity, chartType, mode }: CombinedDail
         className="flex-wrap"
         aria-label="Select metrics to display"
       >
-        {METRICS.map((m) => (
+        {CORE_METRICS.map((m) => (
+          <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
+            <span
+              aria-hidden
+              className="mr-1.5 inline-block size-2 shrink-0 rounded-[2px]"
+              style={{ backgroundColor: m.color }}
+            />
+            {m.label}
+          </ToggleGroupItem>
+        ))}
+        <span className={DAILY_METRIC_GROUP_LABEL_CLASS}>Impression share (search)</span>
+        {IMPRESSION_SHARE_METRICS.map((m) => (
           <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
             <span
               aria-hidden
@@ -962,7 +1025,18 @@ function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewPro
         className="flex-wrap"
         aria-label="Select metric to compare"
       >
-        {METRICS.map((m) => (
+        {CORE_METRICS.map((m) => (
+          <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
+            <span
+              aria-hidden
+              className="mr-1.5 inline-block size-2 shrink-0 rounded-[2px]"
+              style={{ backgroundColor: m.color }}
+            />
+            {m.label}
+          </ToggleGroupItem>
+        ))}
+        <span className={DAILY_METRIC_GROUP_LABEL_CLASS}>Impression share (search)</span>
+        {IMPRESSION_SHARE_METRICS.map((m) => (
           <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
             <span
               aria-hidden
@@ -1291,6 +1365,10 @@ function readDemographicMetric(entry: CampaignDemographicDailyEntry, key: Metric
       return entry.ctr ?? 0;
     case "avg_cpc":
       return entry.avg_cpc;
+    case "impression_share":
+    case "lost_is_budget":
+    case "lost_is_rank":
+      return 0;
   }
 }
 
@@ -1438,7 +1516,7 @@ function DemographicsView({ demographics, granularity }: DemographicsViewProps) 
         className="flex-wrap"
         aria-label="Select metric"
       >
-        {METRICS.map((m) => (
+        {DEMOGRAPHICS_METRICS.map((m) => (
           <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
             <span
               aria-hidden

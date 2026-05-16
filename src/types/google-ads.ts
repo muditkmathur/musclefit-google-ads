@@ -75,6 +75,10 @@ export interface CampaignDailyEntry {
   spend: number;
   conversions: number;
   avg_cpc: number;
+  /** Search impression share 0–1; null when not applicable (e.g. non-search). */
+  impressionShare: number | null;
+  lostIsBudget: number | null;
+  lostIsRank: number | null;
   dod: {
     impressions: DiffValue;
     clicks: DiffValue;

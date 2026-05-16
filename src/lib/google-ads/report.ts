@@ -381,7 +381,7 @@ interface DailyContext {
 
 async function getCampaignDailyReport(ctx: DailyContext): Promise<CampaignDailyReport> {
   const { rangeStart, rangeEnd, periodLabel, forceRefresh } = ctx;
-  const cacheKey = buildCacheKey("report:daily", {
+  const cacheKey = buildCacheKey("report:daily:v2", {
     customerId: getCustomerId(),
     rangeStart,
     rangeEnd,
@@ -407,7 +407,10 @@ async function getCampaignDailyReportUncached(ctx: DailyContext): Promise<Campai
       metrics.ctr,
       metrics.cost_micros,
       metrics.conversions,
-      metrics.average_cpc
+      metrics.average_cpc,
+      metrics.search_impression_share,
+      metrics.search_budget_lost_impression_share,
+      metrics.search_rank_lost_impression_share
     FROM campaign
     WHERE ${gaqlDateFilter}
       AND campaign.status = 'ENABLED'
@@ -422,20 +425,27 @@ async function getCampaignDailyReportUncached(ctx: DailyContext): Promise<Campai
     spend_micros: number;
     conversions: number;
     avg_cpc_micros: number;
+    impressionShare: number | null;
+    lostIsBudget: number | null;
+    lostIsRank: number | null;
   }
 
   const byCampaign = new Map<string, RawDailyEntry[]>();
   for (const r of rows) {
     const name = String(r.campaign?.name ?? "");
     const date = String(r.segments?.date ?? "");
+    const m = r.metrics ?? {};
     const entry: RawDailyEntry = {
       date,
-      impressions: Number(r.metrics?.impressions ?? 0),
-      clicks: Number(r.metrics?.clicks ?? 0),
-      ctr: Number(r.metrics?.ctr ?? 0),
-      spend_micros: Number(r.metrics?.cost_micros ?? 0),
-      conversions: Number(r.metrics?.conversions ?? 0),
-      avg_cpc_micros: Number(r.metrics?.average_cpc ?? 0),
+      impressions: Number(m.impressions ?? 0),
+      clicks: Number(m.clicks ?? 0),
+      ctr: Number(m.ctr ?? 0),
+      spend_micros: Number(m.cost_micros ?? 0),
+      conversions: Number(m.conversions ?? 0),
+      avg_cpc_micros: Number(m.average_cpc ?? 0),
+      impressionShare: parseIsFraction(m.search_impression_share),
+      lostIsBudget: parseIsFraction(m.search_budget_lost_impression_share),
+      lostIsRank: parseIsFraction(m.search_rank_lost_impression_share),
     };
     const list = byCampaign.get(name) ?? [];
     list.push(entry);
@@ -467,6 +477,9 @@ async function getCampaignDailyReportUncached(ctx: DailyContext): Promise<Campai
         spend: +(r.spend_micros / 1_000_000).toFixed(2),
         conversions: r.conversions,
         avg_cpc: +(r.avg_cpc_micros / 1_000_000).toFixed(2),
+        impressionShare: r.impressionShare,
+        lostIsBudget: r.lostIsBudget,
+        lostIsRank: r.lostIsRank,
         dod: dod
           ? {
               impressions: dod.impressions,
