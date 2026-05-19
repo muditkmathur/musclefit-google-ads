@@ -7,7 +7,9 @@
       "Bash(echo \"EXIT:$?\")",
       "Bash(pnpm report *)",
       "Bash(node *)",
-      "Bash(pnpm change-history *)"
+      "Bash(pnpm change-history *)",
+      "Bash(git -C /Users/muditmathur/workspace/musclefit/google-ads diff --staged)",
+      "Bash(git -C /Users/muditmathur/workspace/musclefit/google-ads log --oneline -5)"
     ]
   }
 }

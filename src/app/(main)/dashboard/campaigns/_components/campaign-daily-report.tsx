@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
@@ -183,6 +184,13 @@ const METRICS: readonly MetricSpec[] = [...CORE_METRICS, ...IMPRESSION_SHARE_MET
 
 const IMPRESSION_SHARE_METRIC_KEYS = new Set<MetricKey>(["impression_share", "lost_is_budget", "lost_is_rank"]);
 
+/** Recharts syncs tooltip cursor index across charts sharing this id (daily breakdown only). */
+const DAILY_CHART_SYNC_ID = "campaign-daily-breakdown";
+
+const SYNC_CURSOR = { stroke: "var(--border)", strokeWidth: 1 };
+
+const DEFAULT_CORE_METRIC_KEYS: MetricKey[] = ["spend", "impressions", "conversions"];
+
 const DEMOGRAPHICS_METRICS = METRICS.filter((m) => !IMPRESSION_SHARE_METRIC_KEYS.has(m.key));
 
 const DAILY_METRIC_GROUP_LABEL_CLASS =
@@ -195,6 +203,13 @@ const METRIC_BY_KEY: Record<MetricKey, MetricSpec> = METRICS.reduce(
   },
   {} as Record<MetricKey, MetricSpec>,
 );
+
+const CHART_MARGIN = { bottom: 0, left: 0, right: 0, top: 8 } as const;
+
+function pruneImpressionShareMetricKeys(keys: MetricKey[]): MetricKey[] {
+  const next = keys.filter((k) => !IMPRESSION_SHARE_METRIC_KEYS.has(k));
+  return next.length > 0 ? next : [...DEFAULT_CORE_METRIC_KEYS];
+}
 
 const UNIT_AXIS_ORIENTATION: Record<UnitGroup, "left" | "right"> = {
   count: "left",
@@ -484,6 +499,31 @@ function aggregateMetricByCampaign(
   return list;
 }
 
+/** True when aggregated buckets contain any non-zero impression share triple. */
+function bucketsHaveImpressionShareSignal(buckets: readonly BucketDatum[]): boolean {
+  for (const b of buckets) {
+    for (const m of IMPRESSION_SHARE_METRICS) {
+      const v = b.values[m.key] ?? 0;
+      if (Math.abs(v) > 1e-9) return true;
+    }
+  }
+  return false;
+}
+
+/** True when compare-mode buckets show any signal for visible campaigns under the metric. */
+function compareBucketsHaveCampaignSignal(
+  datums: readonly CompareBucketDatum[],
+  visibleNames: readonly string[],
+): boolean {
+  for (const d of datums) {
+    for (const name of visibleNames) {
+      const v = d.values[name] ?? 0;
+      if (Math.abs(v) > 1e-9) return true;
+    }
+  }
+  return false;
+}
+
 function readMetric(entry: CampaignDailyEntry, key: MetricKey): number {
   switch (key) {
     case "impressions":
@@ -630,6 +670,109 @@ function DailyView({ daily, granularity }: DailyViewProps) {
   );
 }
 
+interface DailyTimeSeriesSeriesItem {
+  dataKey: string;
+  name: string;
+  color: string;
+  yAxisId: string;
+}
+
+interface DailyTimeSeriesChartProps {
+  syncId?: string;
+  data: ReadonlyArray<Record<string, string | number | undefined>>;
+  granularity: CampaignGranularity;
+  chartType: ChartType;
+  axisAssignment: AxisAssignment;
+  chartConfig: ChartConfig;
+  series: DailyTimeSeriesSeriesItem[];
+  tooltipFormatter: (value: unknown, name: unknown) => ReactNode;
+  showLegend?: boolean;
+}
+
+function DailyTimeSeriesChart({
+  syncId,
+  data,
+  granularity,
+  chartType,
+  axisAssignment,
+  chartConfig,
+  series,
+  tooltipFormatter,
+  showLegend = true,
+}: DailyTimeSeriesChartProps) {
+  const yAxes = axisAssignment.descriptors.map((descriptor) => (
+    <YAxis
+      key={descriptor.id}
+      yAxisId={descriptor.id}
+      orientation={descriptor.orientation}
+      tickLine={false}
+      axisLine={false}
+      tickMargin={4}
+      fontSize={10}
+      width={descriptor.visible ? descriptor.width : 0}
+      hide={!descriptor.visible}
+      tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
+      tick={{ fill: descriptor.color }}
+    />
+  ));
+
+  if (chartType === "bar") {
+    return (
+      <ChartContainer config={chartConfig} className="h-64 w-full">
+        <BarChart syncId={syncId} data={data as ChartRow[]} margin={CHART_MARGIN} barCategoryGap={6}>
+          <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
+          <SundayAwareXAxis data={data} granularity={granularity} />
+          {yAxes}
+          <ChartTooltip
+            cursor={SYNC_CURSOR}
+            content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
+          />
+          {showLegend ? <ChartLegend content={<ChartLegendContent />} /> : null}
+          {series.map((s) => (
+            <Bar
+              key={s.dataKey}
+              yAxisId={s.yAxisId}
+              dataKey={s.dataKey}
+              name={s.name}
+              fill={s.color}
+              fillOpacity={0.9}
+              radius={[2, 2, 0, 0]}
+            />
+          ))}
+        </BarChart>
+      </ChartContainer>
+    );
+  }
+
+  return (
+    <ChartContainer config={chartConfig} className="h-64 w-full">
+      <LineChart syncId={syncId} data={data as ChartRow[]} margin={CHART_MARGIN}>
+        <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
+        <SundayAwareXAxis data={data} granularity={granularity} />
+        {yAxes}
+        <ChartTooltip
+          cursor={SYNC_CURSOR}
+          content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
+        />
+        {showLegend ? <ChartLegend content={<ChartLegendContent />} /> : null}
+        {series.map((s) => (
+          <Line
+            key={s.dataKey}
+            yAxisId={s.yAxisId}
+            type="monotone"
+            dataKey={s.dataKey}
+            name={s.name}
+            stroke={s.color}
+            strokeWidth={2}
+            dot={{ r: 3, strokeWidth: 0, fill: s.color }}
+            activeDot={{ r: 5, strokeWidth: 0 }}
+          />
+        ))}
+      </LineChart>
+    </ChartContainer>
+  );
+}
+
 interface CombinedDailyViewProps {
   daily: CampaignDailyReport;
   granularity: CampaignGranularity;
@@ -646,6 +789,10 @@ interface CombinedDailyViewProps {
 function CombinedDailyView({ daily, granularity, chartType, mode }: CombinedDailyViewProps) {
   const [selectedCampaign, setSelectedCampaign] = useState<string>("");
   const [metricKeys, setMetricKeys] = useState<MetricKey[]>(["spend", "impressions", "conversions"]);
+
+  useEffect(() => {
+    setMetricKeys((prev) => pruneImpressionShareMetricKeys(prev));
+  }, []);
 
   // In single mode, ensure there's a valid selection. Defaulting to the first campaign
   // means switching from aggregate -> single does not silently render an empty chart.
@@ -705,6 +852,69 @@ function CombinedDailyView({ daily, granularity, chartType, mode }: CombinedDail
     return config;
   }, []);
 
+  const impressionShareAxisAssignment = useMemo(
+    () =>
+      computeAxisAssignmentForSingleUnit(
+        "percent",
+        IMPRESSION_SHARE_METRICS.map((m) => m.key),
+      ),
+    [],
+  );
+
+  const impressionShareChartConfig = useMemo<ChartConfig>(() => {
+    const config: ChartConfig = {};
+    for (const metric of IMPRESSION_SHARE_METRICS) {
+      config[metric.key] = { color: metric.color, label: metric.label };
+    }
+    return config;
+  }, []);
+
+  const impressionShareChartData = useMemo(
+    () =>
+      buckets.map((b) => ({
+        bucket: b.bucket,
+        label: b.label,
+        impression_share: b.values.impression_share ?? 0,
+        lost_is_budget: b.values.lost_is_budget ?? 0,
+        lost_is_rank: b.values.lost_is_rank ?? 0,
+      })),
+    [buckets],
+  );
+
+  const hasImpressionShareSignal = bucketsHaveImpressionShareSignal(buckets);
+
+  const impressionShareSummaryStats = useMemo(
+    () =>
+      IMPRESSION_SHARE_METRICS.map((metric) => {
+        const values = buckets.map((b) => b.values[metric.key] ?? 0);
+        const total = values.length > 0 ? values.reduce((s, v) => s + v, 0) / values.length : 0;
+        return { metric, value: total };
+      }),
+    [buckets],
+  );
+
+  const perfSeriesItems = useMemo(
+    () =>
+      selectedMetrics.map((metric) => ({
+        dataKey: metric.key,
+        name: metric.key,
+        color: metric.color,
+        yAxisId: axisAssignment.metricToAxis[metric.key],
+      })),
+    [selectedMetrics, axisAssignment],
+  );
+
+  const impressionShareSeriesItems = useMemo(
+    () =>
+      IMPRESSION_SHARE_METRICS.map((metric) => ({
+        dataKey: metric.key,
+        name: metric.key,
+        color: metric.color,
+        yAxisId: impressionShareAxisAssignment.metricToAxis[metric.key],
+      })),
+    [impressionShareAxisAssignment],
+  );
+
   const scopeLabel = isAggregate ? `All campaigns (${daily.campaigns.length})` : (activeCampaign?.campaign ?? "—");
   const showChart = isAggregate ? buckets.length > 0 : Boolean(activeCampaign);
 
@@ -739,23 +949,13 @@ function CombinedDailyView({ daily, granularity, chartType, mode }: CombinedDail
         value={metricKeys}
         onValueChange={(v) => {
           if (v.length === 0) return;
-          setMetricKeys(v as MetricKey[]);
+          const next = v as MetricKey[];
+          setMetricKeys(pruneImpressionShareMetricKeys(next));
         }}
         className="flex-wrap"
         aria-label="Select metrics to display"
       >
         {CORE_METRICS.map((m) => (
-          <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
-            <span
-              aria-hidden
-              className="mr-1.5 inline-block size-2 shrink-0 rounded-[2px]"
-              style={{ backgroundColor: m.color }}
-            />
-            {m.label}
-          </ToggleGroupItem>
-        ))}
-        <span className={DAILY_METRIC_GROUP_LABEL_CLASS}>Impression share (search)</span>
-        {IMPRESSION_SHARE_METRICS.map((m) => (
           <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
             <span
               aria-hidden
@@ -789,105 +989,84 @@ function CombinedDailyView({ daily, granularity, chartType, mode }: CombinedDail
       )}
 
       {showChart && (
-        <div className="rounded-lg border bg-card p-4">
-          <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
-            <div>
-              <h4 className="font-medium text-sm">{scopeLabel}</h4>
-              <p className="text-muted-foreground text-xs">
-                {selectedMetrics.map((m) => m.label).join(" · ")} · {granularity}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              {summaryStats.map(({ metric, value }) => (
-                <div key={metric.key} className="flex items-center gap-2">
-                  <span aria-hidden className="size-2 rounded-[2px]" style={{ backgroundColor: metric.color }} />
-                  <div className="flex flex-col leading-tight">
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                      {metric.label} · {metric.aggregation === "sum" ? "total" : "avg"}
-                    </span>
-                    <span className="font-medium text-sm tabular-nums">{metric.format(value)}</span>
+        <div className="space-y-4">
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
+              <div>
+                <h4 className="font-medium text-sm">Performance</h4>
+                <p className="text-muted-foreground text-xs">{scopeLabel}</p>
+                <p className="text-muted-foreground text-xs">
+                  {selectedMetrics.map((m) => m.label).join(" · ")} · {granularity}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {summaryStats.map(({ metric, value }) => (
+                  <div key={metric.key} className="flex items-center gap-2">
+                    <span aria-hidden className="size-2 rounded-[2px]" style={{ backgroundColor: metric.color }} />
+                    <div className="flex flex-col leading-tight">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                        {metric.label} · {metric.aggregation === "sum" ? "total" : "avg"}
+                      </span>
+                      <span className="font-medium text-sm tabular-nums">{metric.format(value)}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
+            <DailyTimeSeriesChart
+              syncId={DAILY_CHART_SYNC_ID}
+              chartType={chartType}
+              data={chartData}
+              granularity={granularity}
+              axisAssignment={axisAssignment}
+              chartConfig={chartConfig}
+              series={perfSeriesItems}
+              tooltipFormatter={tooltipFormatter}
+              showLegend
+            />
           </div>
-          <ChartContainer config={chartConfig} className="h-64 w-full">
-            {chartType === "bar" ? (
-              <BarChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }} barCategoryGap={6}>
-                <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
-                <SundayAwareXAxis data={chartData} granularity={granularity} />
-                {axisAssignment.descriptors.map((descriptor) => (
-                  <YAxis
-                    key={descriptor.id}
-                    yAxisId={descriptor.id}
-                    orientation={descriptor.orientation}
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={4}
-                    fontSize={10}
-                    width={descriptor.visible ? descriptor.width : 0}
-                    hide={!descriptor.visible}
-                    tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
-                    tick={{ fill: descriptor.color }}
-                  />
-                ))}
-                <ChartTooltip
-                  cursor={{ fill: "var(--muted)", fillOpacity: 0.4 }}
-                  content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
-                />
-                <ChartLegend content={<ChartLegendContent />} />
-                {selectedMetrics.map((metric) => (
-                  <Bar
-                    key={metric.key}
-                    yAxisId={axisAssignment.metricToAxis[metric.key] ?? metric.unit}
-                    dataKey={metric.key}
-                    name={metric.key}
-                    fill={metric.color}
-                    fillOpacity={0.9}
-                    radius={[2, 2, 0, 0]}
-                  />
-                ))}
-              </BarChart>
+
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
+              <div>
+                <h4 className="font-medium text-sm">Impression share (search)</h4>
+                <p className="text-muted-foreground text-xs">Won · Lost to budget · Lost to rank · {granularity}</p>
+                <p className="text-muted-foreground text-xs">{scopeLabel}</p>
+              </div>
+              {hasImpressionShareSignal ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  {impressionShareSummaryStats.map(({ metric, value }) => (
+                    <div key={metric.key} className="flex items-center gap-2">
+                      <span aria-hidden className="size-2 rounded-[2px]" style={{ backgroundColor: metric.color }} />
+                      <div className="flex flex-col leading-tight">
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                          {metric.label} · avg
+                        </span>
+                        <span className="font-medium text-sm tabular-nums">{metric.format(value)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            {hasImpressionShareSignal ? (
+              <DailyTimeSeriesChart
+                syncId={DAILY_CHART_SYNC_ID}
+                chartType={chartType}
+                data={impressionShareChartData}
+                granularity={granularity}
+                axisAssignment={impressionShareAxisAssignment}
+                chartConfig={impressionShareChartConfig}
+                series={impressionShareSeriesItems}
+                tooltipFormatter={tooltipFormatter}
+                showLegend
+              />
             ) : (
-              <LineChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }}>
-                <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
-                <SundayAwareXAxis data={chartData} granularity={granularity} />
-                {axisAssignment.descriptors.map((descriptor) => (
-                  <YAxis
-                    key={descriptor.id}
-                    yAxisId={descriptor.id}
-                    orientation={descriptor.orientation}
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={4}
-                    fontSize={10}
-                    width={descriptor.visible ? descriptor.width : 0}
-                    hide={!descriptor.visible}
-                    tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
-                    tick={{ fill: descriptor.color }}
-                  />
-                ))}
-                <ChartTooltip
-                  cursor={{ stroke: "var(--border)" }}
-                  content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
-                />
-                <ChartLegend content={<ChartLegendContent />} />
-                {selectedMetrics.map((metric) => (
-                  <Line
-                    key={metric.key}
-                    yAxisId={axisAssignment.metricToAxis[metric.key] ?? metric.unit}
-                    type="monotone"
-                    dataKey={metric.key}
-                    name={metric.key}
-                    stroke={metric.color}
-                    strokeWidth={2}
-                    dot={{ r: 3, strokeWidth: 0, fill: metric.color }}
-                    activeDot={{ r: 5, strokeWidth: 0 }}
-                  />
-                ))}
-              </LineChart>
+              <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-md border border-border border-dashed px-4 text-center text-muted-foreground text-sm">
+                No Impression Share data (non-search campaign)
+              </div>
             )}
-          </ChartContainer>
+          </div>
         </div>
       )}
     </div>
@@ -908,7 +1087,12 @@ interface CompareDailyViewProps {
  */
 function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewProps) {
   const [metricKey, setMetricKey] = useState<MetricKey>("spend");
+  const [isMetricKey, setIsMetricKey] = useState<MetricKey>("impression_share");
   const [hiddenCampaigns, setHiddenCampaigns] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    setMetricKey((prev) => (IMPRESSION_SHARE_METRIC_KEYS.has(prev) ? "spend" : prev));
+  }, []);
 
   // Drop entries from the hidden set if a campaign is no longer present in the report
   // so stale names don't silently keep series hidden after a refresh.
@@ -934,6 +1118,13 @@ function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewPro
     [allCampaigns, metric, granularity],
   );
 
+  const isMetricSpec = METRIC_BY_KEY[isMetricKey];
+
+  const isDatums = useMemo(
+    () => aggregateMetricByCampaign(allCampaigns, isMetricSpec, granularity),
+    [allCampaigns, isMetricSpec, granularity],
+  );
+
   const campaignColor = useMemo<Record<string, string>>(() => {
     const map: Record<string, string> = {};
     for (const c of allCampaigns) map[c.campaign] = colorForCampaign(c.campaign);
@@ -947,6 +1138,14 @@ function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewPro
       return row;
     });
   }, [datums, visibleCampaigns]);
+
+  const isCompareChartData = useMemo(() => {
+    return isDatums.map((d) => {
+      const row: Record<string, number | string> = { bucket: d.bucket, label: d.label };
+      for (const c of visibleCampaigns) row[c.campaign] = d.values[c.campaign] ?? 0;
+      return row;
+    });
+  }, [isDatums, visibleCampaigns]);
 
   const summaryStats = useMemo(() => {
     return visibleCampaigns
@@ -963,6 +1162,21 @@ function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewPro
       .sort((a, b) => b.value - a.value);
   }, [visibleCampaigns, datums, metric.aggregation]);
 
+  const impressionShareCompareSummaryStats = useMemo(() => {
+    return visibleCampaigns
+      .map((c) => {
+        const values = isDatums.map((d) => d.values[c.campaign] ?? 0);
+        const total =
+          isMetricSpec.aggregation === "sum"
+            ? values.reduce((s, v) => s + v, 0)
+            : values.length > 0
+              ? values.reduce((s, v) => s + v, 0) / values.length
+              : 0;
+        return { campaign: c.campaign, value: total };
+      })
+      .sort((a, b) => b.value - a.value);
+  }, [visibleCampaigns, isDatums, isMetricSpec.aggregation]);
+
   const axisAssignment = useMemo(
     () =>
       computeAxisAssignmentForSingleUnit(
@@ -972,11 +1186,42 @@ function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewPro
     [metric.unit, visibleCampaigns],
   );
 
+  const impressionShareCompareAxisAssignment = useMemo(
+    () =>
+      computeAxisAssignmentForSingleUnit(
+        isMetricSpec.unit,
+        visibleCampaigns.map((c) => c.campaign),
+      ),
+    [isMetricSpec.unit, visibleCampaigns],
+  );
+
   const chartConfig = useMemo<ChartConfig>(() => {
     const config: ChartConfig = {};
     for (const c of allCampaigns) config[c.campaign] = { color: campaignColor[c.campaign], label: c.campaign };
     return config;
   }, [allCampaigns, campaignColor]);
+
+  const comparePerfSeriesItems = useMemo(
+    () =>
+      visibleCampaigns.map((c) => ({
+        dataKey: c.campaign,
+        name: c.campaign,
+        color: campaignColor[c.campaign],
+        yAxisId: axisAssignment.metricToAxis[c.campaign],
+      })),
+    [visibleCampaigns, campaignColor, axisAssignment],
+  );
+
+  const compareIsSeriesItems = useMemo(
+    () =>
+      visibleCampaigns.map((c) => ({
+        dataKey: c.campaign,
+        name: c.campaign,
+        color: campaignColor[c.campaign],
+        yAxisId: impressionShareCompareAxisAssignment.metricToAxis[c.campaign],
+      })),
+    [visibleCampaigns, campaignColor, impressionShareCompareAxisAssignment],
+  );
 
   const toggleCampaign = (name: string) => {
     setHiddenCampaigns((prev) => {
@@ -994,7 +1239,12 @@ function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewPro
   const allHidden = hasData && visibleCampaigns.length === 0;
   const showChart = hasData && !allHidden;
 
-  const tooltipFormatter = (value: unknown, name: unknown) => {
+  const visibleCampaignNames = useMemo(() => visibleCampaigns.map((c) => c.campaign), [visibleCampaigns]);
+
+  const hasCompareImpressionShareSignal =
+    visibleCampaignNames.length > 0 && compareBucketsHaveCampaignSignal(isDatums, visibleCampaignNames);
+
+  const tooltipFormatterPerf = (value: unknown, name: unknown) => {
     const campaignName = String(name);
     return (
       <div className="flex w-full items-center justify-between gap-3">
@@ -1011,6 +1261,23 @@ function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewPro
     );
   };
 
+  const tooltipFormatterIs = (value: unknown, name: unknown) => {
+    const campaignName = String(name);
+    return (
+      <div className="flex w-full items-center justify-between gap-3">
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <span
+            aria-hidden
+            className="size-2 rounded-[2px]"
+            style={{ backgroundColor: campaignColor[campaignName] ?? "var(--muted-foreground)" }}
+          />
+          {campaignName}
+        </span>
+        <span className="font-medium font-mono tabular-nums">{isMetricSpec.format(Number(value ?? 0))}</span>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <ToggleGroup
@@ -1020,23 +1287,12 @@ function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewPro
         spacing={1}
         value={metricKey}
         onValueChange={(v) => {
-          if (v) setMetricKey(v as MetricKey);
+          if (v && !IMPRESSION_SHARE_METRIC_KEYS.has(v as MetricKey)) setMetricKey(v as MetricKey);
         }}
         className="flex-wrap"
-        aria-label="Select metric to compare"
+        aria-label="Select performance metric to compare"
       >
         {CORE_METRICS.map((m) => (
-          <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
-            <span
-              aria-hidden
-              className="mr-1.5 inline-block size-2 shrink-0 rounded-[2px]"
-              style={{ backgroundColor: m.color }}
-            />
-            {m.label}
-          </ToggleGroupItem>
-        ))}
-        <span className={DAILY_METRIC_GROUP_LABEL_CLASS}>Impression share (search)</span>
-        {IMPRESSION_SHARE_METRICS.map((m) => (
           <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
             <span
               aria-hidden
@@ -1049,115 +1305,139 @@ function CompareDailyView({ daily, granularity, chartType }: CompareDailyViewPro
       </ToggleGroup>
 
       {hasData ? (
-        <div className="rounded-lg border bg-card p-4">
-          <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
-            <div>
-              <h4 className="font-medium text-sm">{metric.label} across campaigns</h4>
-              <p className="text-muted-foreground text-xs">
-                {visibleCampaigns.length} of {allCampaigns.length} shown · {granularity} ·{" "}
-                {metric.aggregation === "sum" ? "summed" : "averaged"} per bucket
-              </p>
+        <div className="space-y-4">
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
+              <div>
+                <h4 className="font-medium text-sm">Performance · {metric.label} across campaigns</h4>
+                <p className="text-muted-foreground text-xs">
+                  {visibleCampaigns.length} of {allCampaigns.length} shown · {granularity} ·{" "}
+                  {metric.aggregation === "sum" ? "summed" : "averaged"} per bucket
+                </p>
+              </div>
+              <div className="flex max-w-full flex-wrap items-center gap-3">
+                {summaryStats.slice(0, 6).map(({ campaign, value }) => (
+                  <div key={campaign} className="flex items-center gap-2">
+                    <span
+                      aria-hidden
+                      className="size-2 rounded-[2px]"
+                      style={{ backgroundColor: campaignColor[campaign] }}
+                    />
+                    <div className="flex flex-col leading-tight">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                        {campaign} · {metric.aggregation === "sum" ? "total" : "avg"}
+                      </span>
+                      <span className="font-medium text-sm tabular-nums">{metric.format(value)}</span>
+                    </div>
+                  </div>
+                ))}
+                {summaryStats.length > 6 && (
+                  <span className="text-muted-foreground text-xs">+{summaryStats.length - 6} more</span>
+                )}
+              </div>
             </div>
-            <div className="flex max-w-full flex-wrap items-center gap-3">
-              {summaryStats.slice(0, 6).map(({ campaign, value }) => (
-                <div key={campaign} className="flex items-center gap-2">
+            {showChart ? (
+              <DailyTimeSeriesChart
+                syncId={DAILY_CHART_SYNC_ID}
+                chartType={chartType}
+                data={chartData}
+                granularity={granularity}
+                axisAssignment={axisAssignment}
+                chartConfig={chartConfig}
+                series={comparePerfSeriesItems}
+                tooltipFormatter={tooltipFormatterPerf}
+                showLegend={false}
+              />
+            ) : (
+              <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-border border-dashed text-muted-foreground text-sm">
+                <span>All campaigns hidden. Click an entry below to bring one back.</span>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg border bg-card p-4">
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              spacing={1}
+              value={isMetricKey}
+              onValueChange={(v) => {
+                if (v && IMPRESSION_SHARE_METRIC_KEYS.has(v as MetricKey)) setIsMetricKey(v as MetricKey);
+              }}
+              className="mb-3 flex-wrap"
+              aria-label="Select impression share metric"
+            >
+              <span className={DAILY_METRIC_GROUP_LABEL_CLASS}>Metric</span>
+              {IMPRESSION_SHARE_METRICS.map((m) => (
+                <ToggleGroupItem key={m.key} value={m.key} className="text-xs">
                   <span
                     aria-hidden
-                    className="size-2 rounded-[2px]"
-                    style={{ backgroundColor: campaignColor[campaign] }}
+                    className="mr-1.5 inline-block size-2 shrink-0 rounded-[2px]"
+                    style={{ backgroundColor: m.color }}
                   />
-                  <div className="flex flex-col leading-tight">
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                      {campaign} · {metric.aggregation === "sum" ? "total" : "avg"}
-                    </span>
-                    <span className="font-medium text-sm tabular-nums">{metric.format(value)}</span>
-                  </div>
-                </div>
+                  {m.label}
+                </ToggleGroupItem>
               ))}
-              {summaryStats.length > 6 && (
-                <span className="text-muted-foreground text-xs">+{summaryStats.length - 6} more</span>
-              )}
+            </ToggleGroup>
+            <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
+              <div>
+                <h4 className="font-medium text-sm">Impression share · {isMetricSpec.label}</h4>
+                <p className="text-muted-foreground text-xs">
+                  {visibleCampaigns.length} of {allCampaigns.length} shown · {granularity} ·{" "}
+                  {isMetricSpec.aggregation === "sum" ? "summed" : "averaged"} per bucket
+                </p>
+              </div>
+              {hasCompareImpressionShareSignal ? (
+                <div className="flex max-w-full flex-wrap items-center gap-3">
+                  {impressionShareCompareSummaryStats.slice(0, 6).map(({ campaign, value }) => (
+                    <div key={campaign} className="flex items-center gap-2">
+                      <span
+                        aria-hidden
+                        className="size-2 rounded-[2px]"
+                        style={{ backgroundColor: campaignColor[campaign] }}
+                      />
+                      <div className="flex flex-col leading-tight">
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                          {campaign} · {isMetricSpec.aggregation === "sum" ? "total" : "avg"}
+                        </span>
+                        <span className="font-medium text-sm tabular-nums">{isMetricSpec.format(value)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {impressionShareCompareSummaryStats.length > 6 && (
+                    <span className="text-muted-foreground text-xs">
+                      +{impressionShareCompareSummaryStats.length - 6} more
+                    </span>
+                  )}
+                </div>
+              ) : null}
             </div>
-          </div>
-          {showChart ? (
-            <ChartContainer config={chartConfig} className="h-64 w-full">
-              {chartType === "bar" ? (
-                <BarChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }} barCategoryGap={6}>
-                  <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
-                  <SundayAwareXAxis data={chartData} granularity={granularity} />
-                  {axisAssignment.descriptors.map((descriptor) => (
-                    <YAxis
-                      key={descriptor.id}
-                      yAxisId={descriptor.id}
-                      orientation={descriptor.orientation}
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={4}
-                      fontSize={10}
-                      width={descriptor.visible ? descriptor.width : 0}
-                      hide={!descriptor.visible}
-                      tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
-                    />
-                  ))}
-                  <ChartTooltip
-                    cursor={{ fill: "var(--muted)", fillOpacity: 0.4 }}
-                    content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
-                  />
-                  {visibleCampaigns.map((c) => (
-                    <Bar
-                      key={c.campaign}
-                      yAxisId={axisAssignment.metricToAxis[c.campaign]}
-                      dataKey={c.campaign}
-                      name={c.campaign}
-                      fill={campaignColor[c.campaign]}
-                      fillOpacity={0.9}
-                      radius={[2, 2, 0, 0]}
-                    />
-                  ))}
-                </BarChart>
+            {showChart ? (
+              hasCompareImpressionShareSignal ? (
+                <DailyTimeSeriesChart
+                  syncId={DAILY_CHART_SYNC_ID}
+                  chartType={chartType}
+                  data={isCompareChartData}
+                  granularity={granularity}
+                  axisAssignment={impressionShareCompareAxisAssignment}
+                  chartConfig={chartConfig}
+                  series={compareIsSeriesItems}
+                  tooltipFormatter={tooltipFormatterIs}
+                  showLegend={false}
+                />
               ) : (
-                <LineChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 8 }}>
-                  <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" />
-                  <SundayAwareXAxis data={chartData} granularity={granularity} />
-                  {axisAssignment.descriptors.map((descriptor) => (
-                    <YAxis
-                      key={descriptor.id}
-                      yAxisId={descriptor.id}
-                      orientation={descriptor.orientation}
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={4}
-                      fontSize={10}
-                      width={descriptor.visible ? descriptor.width : 0}
-                      hide={!descriptor.visible}
-                      tickFormatter={UNIT_TICK_FORMAT[descriptor.unit]}
-                    />
-                  ))}
-                  <ChartTooltip
-                    cursor={{ stroke: "var(--border)" }}
-                    content={<ChartTooltipContent indicator="dot" labelKey="label" formatter={tooltipFormatter} />}
-                  />
-                  {visibleCampaigns.map((c) => (
-                    <Line
-                      key={c.campaign}
-                      yAxisId={axisAssignment.metricToAxis[c.campaign]}
-                      type="monotone"
-                      dataKey={c.campaign}
-                      name={c.campaign}
-                      stroke={campaignColor[c.campaign]}
-                      strokeWidth={2}
-                      dot={{ r: 3, strokeWidth: 0, fill: campaignColor[c.campaign] }}
-                      activeDot={{ r: 5, strokeWidth: 0 }}
-                    />
-                  ))}
-                </LineChart>
-              )}
-            </ChartContainer>
-          ) : (
-            <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-border border-dashed text-muted-foreground text-sm">
-              <span>All campaigns hidden. Click an entry below to bring one back.</span>
-            </div>
-          )}
+                <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-md border border-border border-dashed px-4 text-center text-muted-foreground text-sm">
+                  No Impression Share data (non-search campaign)
+                </div>
+              )
+            ) : (
+              <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-border border-dashed text-muted-foreground text-sm">
+                <span>All campaigns hidden. Click an entry below to bring one back.</span>
+              </div>
+            )}
+          </div>
+
           <CampaignLegend
             campaigns={allCampaigns.map((c) => c.campaign)}
             hidden={hiddenCampaigns}

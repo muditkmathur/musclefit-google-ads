@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 pnpm dev              # Next.js dev server
 pnpm build            # Production build
+pnpm start            # Run production build
 pnpm typecheck        # TypeScript type check (no emit)
 pnpm check            # Biome lint + format check
 pnpm check:fix        # Biome lint + format auto-fix
@@ -23,10 +24,12 @@ pnpm campaign-keywords         # Keyword list for a campaign
 pnpm change-history            # Account change history (last 30 days)
 ```
 
+There is **no test suite** — no testing framework is installed.
+
 ## Architecture
 
 ### What this is
-A Next.js dashboard and CLI toolset for managing and reporting on Google Ads campaigns for muscle fit. All pages under the **Google Ads** sidebar group are active and backed by real API calls: Campaigns, Keyword Analysis, Ad Groups, Schedule (hour×day heatmap), Devices, Quality Score, and Change History. The **Pages** and **Legacy** sidebar groups are stubs or old v1 dashboards kept for reference.
+A Next.js dashboard and CLI toolset for managing and reporting on Google Ads campaigns for muscle fit. All pages under the **Google Ads** sidebar group are active and backed by real API calls: Campaigns, Keyword Analysis, Ad Groups, Schedule (hour×day heatmap), Devices, Quality Score, and Change History. The **Pages** sidebar group has auth page stubs (login/register v1/v2). The **Legacy** sidebar group contains old v1 dashboards kept for reference.
 
 ### Request flow
 ```
@@ -40,7 +43,8 @@ UI Component
 All server actions return `ActionResult<T> = { ok: true; data: T } | { ok: false; error: string }`. Error messages are normalized (invalid_grant → human-readable OAuth hint, missing env vars surface as-is).
 
 ### Google Ads API layer (`src/lib/google-ads/`)
-- **`client.ts`** — creates and caches the `google-ads-api` `Customer` object per refresh token.
+- **`client.ts`** — creates the `google-ads-api` `Customer` object per refresh token.
+- **`customer-cache.ts`** — module-level in-memory singleton that caches the `Customer` object keyed by refresh token. Invalidated by `resetGoogleAdsCustomerCache()` when the token changes via OAuth flow.
 - **`refresh-token.ts`** — resolves the refresh token: Redis key `ga:oauth:refresh_token` takes priority over `GOOGLE_ADS_REFRESH_TOKEN` env var. Updating via `setGoogleAdsRefreshTokenInCache()` also invalidates the in-memory customer cache.
 - **`oauth.ts`** — PKCE + OAuth2 flow helpers; authorize route is `/api/google-ads/oauth/authorize`, callback is `/api/google-ads/oauth/callback`.
 - **`report.ts`** — campaign summary, daily breakdown (DoD deltas), and demographics (age_range_view / gender_view) reports.
@@ -49,12 +53,18 @@ All server actions return `ActionResult<T> = { ok: true; data: T } | { ok: false
 
 All monetary values from the API are in micros; divide by `1_000_000` to get INR (₹).
 
+All domain TypeScript types are centralized in **`src/types/google-ads.ts`** — the canonical reference when adding new report shapes.
+
 ### Caching (`src/lib/cache/`)
-- Redis is optional. If `REDIS_HOST` is absent the app runs fine without caching.
-- `getOrSetJson(key, loader, ttlSeconds, { forceRefresh })` is the single cache-aside primitive.
-- Cache keys are built via `buildCacheKey(namespace, input)` — SHA-1 hash of a stable-stringified input object, prefixed `ga:`.
-- Default TTL is 1 hour (`CACHE_TTL_SECONDS = 3600`).
-- Pass `forceRefresh: true` on server actions/report functions to bypass the cache.
+There are two caching layers:
+1. **In-memory**: `customer-cache.ts` holds a module-level `Customer` singleton, keyed by refresh token. Survives the process lifetime; reset on token rotation.
+2. **Redis cache-aside**: `query-cache.ts` wraps report calls. Redis is optional — if `REDIS_HOST` is absent the app runs fine without it.
+
+`getOrSetJson(key, loader, ttlSeconds, { forceRefresh })` is the single cache-aside primitive. Cache keys are built via `buildCacheKey(namespace, input)` — SHA-1 hash of a stable-stringified input object, prefixed `ga:`. Default TTL is 1 hour (`CACHE_TTL_SECONDS = 3600`). Pass `forceRefresh: true` to bypass.
+
+### Server actions
+- **`src/app/actions/google-ads.ts`** — all Google Ads data fetching actions.
+- **`src/server/server-actions.ts`** — cookie helpers (`getValueFromCookie`, `setValueToCookie`, `getPreference`) used for persisting UI preferences server-side.
 
 ### UI preferences
 Zustand vanilla store (`src/stores/preferences/`) holds theme, font, sidebar variant, etc. It is hydrated server-side via `PreferencesProvider` and persisted client-side. The `isSynced` flag gates whether stored preferences override default props.
@@ -67,6 +77,9 @@ Zustand vanilla store (`src/stores/preferences/`) holds theme, font, sidebar var
 
 ### Path alias
 `@/` resolves to `src/`.
+
+### `data/` directory
+Stores CLI script output files (JSON, CSV). The `saveToDisk: true` option on `runCampaignReport` writes JSON here. Also used for manual data exports (e.g., keyword CSVs from Google Ads UI).
 
 ## Environment variables
 
