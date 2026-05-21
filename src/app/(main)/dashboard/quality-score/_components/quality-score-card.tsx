@@ -80,10 +80,7 @@ function ComponentCell({ value }: { value: QualityScoreComponent }) {
   return <TableCell className={cn("text-xs", componentClass(value))}>{componentLabel(value)}</TableCell>;
 }
 
-const BOTTLENECK_CONFIG: Record<
-  QualityScoreBottleneck,
-  { label: string; className: string; description: string }
-> = {
+const BOTTLENECK_CONFIG: Record<QualityScoreBottleneck, { label: string; className: string; description: string }> = {
   bid: {
     label: "Bid low",
     className: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
@@ -120,15 +117,7 @@ function BottleneckCell({ value }: { value: QualityScoreBottleneck }) {
   );
 }
 
-function CpcCell({
-  maxBid,
-  avgCpc,
-  firstPage,
-}: {
-  maxBid: number | null;
-  avgCpc: number;
-  firstPage: number | null;
-}) {
+function CpcCell({ maxBid, avgCpc, firstPage }: { maxBid: number | null; avgCpc: number; firstPage: number | null }) {
   const bidLow = maxBid !== null && firstPage !== null && maxBid > 0 && maxBid < firstPage * 0.9;
   const smartBidding = maxBid === null;
 
@@ -200,7 +189,11 @@ function QualityScoreHelp() {
         onClick={() => setOpen((o) => !o)}
       >
         <span>What do these columns mean?</span>
-        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        {open ? (
+          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        )}
       </button>
 
       {open && (

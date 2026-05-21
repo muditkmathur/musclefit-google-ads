@@ -1,16 +1,38 @@
 {
   "permissions": {
     "allow": [
+      "Bash(pnpm dev *)",
+      "Bash(pnpm build *)",
+      "Bash(pnpm start *)",
       "Bash(pnpm check *)",
       "Bash(pnpm check:fix)",
       "Bash(pnpm typecheck *)",
-      "Bash(echo \"EXIT:$?\")",
+      "Bash(pnpm lint *)",
+      "Bash(pnpm format *)",
       "Bash(pnpm report *)",
-      "Bash(node *)",
+      "Bash(pnpm search-terms *)",
+      "Bash(pnpm ngram-analysis *)",
+      "Bash(pnpm campaign-keywords *)",
       "Bash(pnpm change-history *)",
-      "Bash(git -C /Users/muditmathur/workspace/musclefit/google-ads diff --staged)",
-      "Bash(git -C /Users/muditmathur/workspace/musclefit/google-ads log --oneline -5)",
-      "Bash(git add *)"
+      "Bash(pnpm add *)",
+      "Bash(node *)",
+      "Bash(python3 *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git stash *)",
+      "Skill(update-config)",
+      "mcp__google-ads__get_campaign_report",
+      "mcp__google-ads__get_ad_groups",
+      "mcp__google-ads__get_search_terms",
+      "mcp__google-ads__get_quality_score",
+      "mcp__google-ads__get_campaign_keywords",
+      "mcp__google-ads__get_change_history",
+      "mcp__google-ads__get_device_performance",
+      "mcp__google-ads__get_keyword_analysis",
+      "mcp__google-ads__get_schedule_performance"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "google-ads"
+  ]
 }
