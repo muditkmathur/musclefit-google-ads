@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "google-ads": {
+      "command": "pnpm",
+      "args": ["tsx", "scripts/mcp-server.ts"]
+    }
+  }
+}
