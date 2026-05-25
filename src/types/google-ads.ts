@@ -23,6 +23,8 @@ export interface CampaignSummaryRow {
   impressionShare: number | null;
   lostIsBudget: number | null;
   lostIsRank: number | null;
+  dailyBudget: number;    // INR (micros / 1_000_000)
+  periodBudget: number;   // dailyBudget × days in the selected date range
 }
 
 export interface CampaignTotals {
@@ -364,4 +366,167 @@ export interface DevicePerformanceReport {
   generatedAt: string;
   dateRange: DateRange;
   rows: DeviceRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Landing pages
+// ---------------------------------------------------------------------------
+
+export interface LandingPageRow {
+  /** Unexpanded final URL as configured on the ad. */
+  url: string;
+  /** Campaigns that surfaced this URL during the date range. */
+  campaigns: string[];
+  /** Ad groups that have an ad pointing to this URL (best-effort attribution). */
+  usedByAdGroups: string[];
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  spend: number;
+  conversions: number;
+  /** Cost per conversion (₹). 0 when conversions are 0. */
+  cpa: number;
+  /** Conversion rate (conversions / clicks). 0 when clicks are 0. */
+  convRate: number;
+  /** Spend ≥ ₹500 and conversions = 0 — likely waste. */
+  isWaste: boolean;
+}
+
+export interface LandingPageReport {
+  generatedAt: string;
+  dateRange: DateRange;
+  campaignFilter: string | null;
+  rows: LandingPageRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Keyword ↔ Search term map
+// ---------------------------------------------------------------------------
+
+export interface KeywordSearchTermMapRow {
+  campaign: string;
+  adGroup: string;
+  /** What the user actually typed into Google. */
+  searchTerm: string;
+  /** Triggering keyword (segments.keyword.info.text). */
+  keyword: string;
+  /** Human-friendly match type label (Broad / Phrase / Exact). */
+  matchType: string;
+  /** Search term status enum (e.g. ADDED, EXCLUDED, NONE). */
+  status: string;
+  impressions: number;
+  clicks: number;
+  spend: number;
+  conversions: number;
+  cpa: number;
+  convRate: number;
+  /** True when the search term shares no significant token with the keyword. */
+  intentMismatch: boolean;
+  /** True when triggered by a Broad match keyword. */
+  isBroadTrigger: boolean;
+  /** Spend ≥ ₹200 and conversions = 0. */
+  isWaste: boolean;
+}
+
+export interface KeywordSearchTermMapReport {
+  generatedAt: string;
+  dateRange: DateRange;
+  campaignFilter: string | null;
+  /** Number of rows actually returned after the `top` cap. */
+  rowCount: number;
+  /** The cap applied to the result set (default 300). */
+  topLimit: number;
+  rows: KeywordSearchTermMapRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Ad / RSA performance
+// ---------------------------------------------------------------------------
+
+export type AdStrengthLabel = "Pending" | "No ads" | "Poor" | "Average" | "Good" | "Excellent" | "Unknown";
+
+export type AssetPerformanceLabel = "BEST" | "GOOD" | "LOW" | "LEARNING" | "PENDING" | "UNKNOWN";
+
+export type AdAssetFieldType = "HEADLINE" | "DESCRIPTION" | "OTHER";
+
+export interface AdAssetPerformanceRow {
+  campaign: string;
+  adGroup: string;
+  /** "Headline" / "Description" / raw API enum for anything else. */
+  fieldType: AdAssetFieldType;
+  /** The asset text (RSA headline or description). */
+  text: string;
+  performanceLabel: AssetPerformanceLabel;
+  impressions: number;
+  clicks: number;
+}
+
+export interface AdPerformanceRow {
+  campaign: string;
+  adGroup: string;
+  adId: string;
+  /** Google enum (RESPONSIVE_SEARCH_AD, EXPANDED_TEXT_AD, etc.) normalised to label. */
+  adType: string;
+  finalUrls: string[];
+  adStrength: AdStrengthLabel;
+  status: string;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  spend: number;
+  conversions: number;
+  cpa: number;
+  /** Assets attached to this ad (RSA only). Empty for legacy types. */
+  assets: AdAssetPerformanceRow[];
+}
+
+export interface AdPerformanceReport {
+  generatedAt: string;
+  dateRange: DateRange;
+  campaignFilter: string | null;
+  ads: AdPerformanceRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Auction insights
+// ---------------------------------------------------------------------------
+
+export interface AuctionInsightCompetitorRow {
+  campaign: string;
+  /** Competitor visible URL / domain. */
+  domain: string;
+  /** 0–1 fractions, weighted by keyword spend within the campaign. */
+  impressionShare: number;
+  overlapRate: number;
+  positionAboveRate: number;
+  outrankingShare: number;
+  /** How many of the campaign's top keywords this competitor showed up on. */
+  keywordCount: number;
+  /** Total impressions seen on the keywords this competitor shared. */
+  impressions: number;
+}
+
+export interface AuctionInsightKeywordRow {
+  campaign: string;
+  adGroup: string;
+  keyword: string;
+  domain: string;
+  impressionShare: number;
+  overlapRate: number;
+  positionAboveRate: number;
+  outrankingShare: number;
+  impressions: number;
+  spend: number;
+}
+
+export interface AuctionInsightReport {
+  generatedAt: string;
+  dateRange: DateRange;
+  campaignFilter: string | null;
+  /** Per-campaign top competitor rollup. */
+  competitors: AuctionInsightCompetitorRow[];
+  /** Detail rows for drill-down (top keywords × top domains). */
+  keywordRows: AuctionInsightKeywordRow[];
+  /** Set when the API denies auction-insight metrics for this developer token. */
+  warning?: string | null;
 }
