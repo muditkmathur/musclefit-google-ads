@@ -17,6 +17,7 @@ interface MetricSpec {
   label: string;
   improvement: ImprovementDirection;
   format: (value: number) => string;
+  isNull?: (value: number) => boolean;
 }
 
 const METRICS: readonly MetricSpec[] = [
@@ -55,6 +56,7 @@ const METRICS: readonly MetricSpec[] = [
     label: "CPA",
     improvement: "lower",
     format: (v) => (v > 0 ? `₹${formatCompactNumber(v)}` : "N/A"),
+    isNull: (v) => v === 0,
   },
 ];
 
@@ -112,7 +114,8 @@ interface KpiCardProps {
 
 function KpiCard({ metric, current, previous, rangeLabel, loading }: KpiCardProps) {
   const showSkeleton = Boolean(loading) || current == null;
-  const change = current != null && previous != null ? pctChange(current, previous) : null;
+  const effectiveCurrent = metric.isNull?.(current ?? 0) ? null : current;
+  const change = effectiveCurrent != null && previous != null ? pctChange(effectiveCurrent, previous) : null;
 
   const isFlat = change === null || change === 0;
   const isImprovement = !isFlat && (metric.improvement === "higher" ? (change ?? 0) > 0 : (change ?? 0) < 0);
