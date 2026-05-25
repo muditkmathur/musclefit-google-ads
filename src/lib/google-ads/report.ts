@@ -149,7 +149,7 @@ async function queryCampaignSummary(
   rangeEnd: string,
   options: { forceRefresh?: boolean } = {},
 ): Promise<CampaignQueryResult> {
-  const cacheKey = buildCacheKey("report:summary:v2", {
+  const cacheKey = buildCacheKey("report:summary:v3", {
     customerId: getCustomerId(),
     rangeStart,
     rangeEnd,
@@ -165,6 +165,9 @@ async function queryCampaignSummary(
 }
 
 async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string): Promise<CampaignQueryResult> {
+  const rangeStartDate = new Date(`${rangeStart}T00:00:00`);
+  const rangeEndDate = new Date(`${rangeEnd}T00:00:00`);
+  const rangeDays = daysBetween(rangeStartDate, rangeEndDate);
   const gaqlDateFilter = `segments.date BETWEEN '${rangeStart}' AND '${rangeEnd}'`;
   const customer = await getCustomer();
   const rows = await customer.query(`
@@ -180,7 +183,9 @@ async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string
       metrics.average_cpc,
       metrics.search_impression_share,
       metrics.search_budget_lost_impression_share,
-      metrics.search_rank_lost_impression_share
+      metrics.search_rank_lost_impression_share,
+      campaign_budget.amount_micros,
+      campaign_budget.type
     FROM campaign
     WHERE ${gaqlDateFilter}
       AND campaign.status = 'ENABLED'
@@ -199,6 +204,10 @@ async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string
     const spendRaw = cost / 1_000_000;
     const cpaRaw = conv > 0 ? costPerConv / 1_000_000 : 0;
 
+    const b = r.campaign_budget ?? {};
+    const dailyBudget = Number(b.amount_micros ?? 0) / 1_000_000;
+    const periodBudget = dailyBudget * rangeDays;
+
     return {
       campaign: String(c.name ?? ""),
       status: String(c.status ?? ""),
@@ -214,6 +223,8 @@ async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string
       impressionShare: parseIsFraction(m.search_impression_share),
       lostIsBudget: parseIsFraction(m.search_budget_lost_impression_share),
       lostIsRank: parseIsFraction(m.search_rank_lost_impression_share),
+      dailyBudget,
+      periodBudget,
     };
   });
 
