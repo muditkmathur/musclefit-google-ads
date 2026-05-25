@@ -5,10 +5,14 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 import { runAdGroupReport } from "../src/lib/google-ads/ad-group-report";
+import { runAdPerformance } from "../src/lib/google-ads/ad-performance";
+import { runAuctionInsights } from "../src/lib/google-ads/auction-insights";
 import { runCampaignKeywords } from "../src/lib/google-ads/campaign-keywords";
 import { runChangeHistory } from "../src/lib/google-ads/change-history";
 import { runDevicePerformance } from "../src/lib/google-ads/device-performance";
 import { runKeywordAnalysisBundle } from "../src/lib/google-ads/keyword-analysis";
+import { runKeywordSearchTermMap } from "../src/lib/google-ads/keyword-search-term-map";
+import { runLandingPageReport } from "../src/lib/google-ads/landing-page-report";
 import { runQualityScore } from "../src/lib/google-ads/quality-score";
 import { runCampaignReport } from "../src/lib/google-ads/report";
 import { runSchedulePerformance } from "../src/lib/google-ads/schedule-performance";
@@ -43,7 +47,7 @@ function fail(err: unknown) {
 
 server.tool(
   "get_campaign_report",
-  "Campaign performance summary with optional daily breakdown and demographic data. Returns impressions, clicks, spend, conversions, CTR, CPC, and impression share per campaign plus account totals.",
+  "Campaign performance summary with optional daily breakdown and demographic data. Returns impressions, clicks, spend, conversions, CTR, CPC, and impression share per campaign plus account totals. Each campaign row includes dailyBudget (INR/day cap from Google Ads) and periodBudget (dailyBudget × days in range) for budget utilization analysis.",
   {
     range: rangeSchema,
     granularity: z
@@ -227,6 +231,103 @@ server.tool(
       const data = await runCampaignKeywords({
         campaignId: campaign_id,
         campaignName: campaign_name,
+      });
+      return ok(data);
+    } catch (err) {
+      return fail(err);
+    }
+  },
+);
+
+server.tool(
+  "get_landing_page_report",
+  "Landing page performance — spend, conversions, CTR, CPA per unexpanded final URL. Includes which ad groups point to each URL and a waste flag (spend ≥ ₹500 with 0 conversions). Use to find LPs that need rework when QS landing-page-experience is low.",
+  {
+    range: rangeSchema,
+    campaign: z.string().optional().describe("Filter to a specific campaign by name (partial match)"),
+    force_refresh: forceRefreshSchema,
+  },
+  async ({ range, campaign, force_refresh }) => {
+    try {
+      const data = await runLandingPageReport({
+        range,
+        campaign: campaign ?? null,
+        forceRefresh: force_refresh,
+      });
+      return ok(data);
+    } catch (err) {
+      return fail(err);
+    }
+  },
+);
+
+server.tool(
+  "get_keyword_search_term_map",
+  "Maps each search term back to the triggering keyword and match type, with per-row spend/conversions plus intent-mismatch, broad-trigger, and waste flags. Use to spot broad keywords pulling irrelevant traffic.",
+  {
+    range: rangeSchema,
+    campaign: z.string().optional().describe("Filter to a specific campaign by name (partial match)"),
+    top: z
+      .number()
+      .int()
+      .min(1)
+      .max(1000)
+      .optional()
+      .default(300)
+      .describe("Cap the result set to top N rows by spend (default 300, max 1000)"),
+    force_refresh: forceRefreshSchema,
+  },
+  async ({ range, campaign, top, force_refresh }) => {
+    try {
+      const data = await runKeywordSearchTermMap({
+        range,
+        campaign: campaign ?? null,
+        top,
+        forceRefresh: force_refresh,
+      });
+      return ok(data);
+    } catch (err) {
+      return fail(err);
+    }
+  },
+);
+
+server.tool(
+  "get_ad_performance",
+  "Ad-level performance with RSA ad strength and per-asset (headline/description) performance labels (BEST/GOOD/LOW/LEARNING). Use to identify weak ads, weak assets, and ads that need refreshing.",
+  {
+    range: rangeSchema,
+    campaign: z.string().optional().describe("Filter to a specific campaign by name (partial match)"),
+    force_refresh: forceRefreshSchema,
+  },
+  async ({ range, campaign, force_refresh }) => {
+    try {
+      const data = await runAdPerformance({
+        range,
+        campaign: campaign ?? null,
+        forceRefresh: force_refresh,
+      });
+      return ok(data);
+    } catch (err) {
+      return fail(err);
+    }
+  },
+);
+
+server.tool(
+  "get_auction_insights",
+  "Competitor auction insights — domains you compete with on Search keywords, with impression share, overlap rate, position-above rate, and outranking share. Use to explain Lost IS (rank). Search campaigns only; sparse when keyword volume is low.",
+  {
+    range: rangeSchema,
+    campaign: z.string().optional().describe("Filter to a specific campaign by name (partial match)"),
+    force_refresh: forceRefreshSchema,
+  },
+  async ({ range, campaign, force_refresh }) => {
+    try {
+      const data = await runAuctionInsights({
+        range,
+        campaign: campaign ?? null,
+        forceRefresh: force_refresh,
       });
       return ok(data);
     } catch (err) {
