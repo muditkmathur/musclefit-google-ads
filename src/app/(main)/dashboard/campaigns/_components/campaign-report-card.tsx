@@ -20,6 +20,12 @@ import type { CampaignGranularity, CampaignRangeKey, CampaignReport, CampaignSum
 import { CampaignDailyReportSection } from "./campaign-daily-report";
 import { CampaignKpiStrip } from "./campaign-kpi-strip";
 
+function formatBudgetAmount(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
+  return v.toFixed(0);
+}
+
 /**
  * IS stacked bar: green = impressions won, amber = lost to budget, red = lost to rank.
  * Shows at a glance where you're losing and why.
@@ -69,11 +75,49 @@ function IsBar({
           <div className="h-full bg-amber-300 dark:bg-amber-500/70" style={{ width: `${budget * 100}%` }} />
           <div className="h-full bg-destructive/70" style={{ width: `${rank * 100}%` }} />
         </div>
-        <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground">
-          <span className="text-foreground font-medium">{wonPct}% won</span>
+        <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums">
+          <span className="font-medium text-foreground">{wonPct}% won</span>
           {budget > 0.01 && <span className="text-amber-600 dark:text-amber-400">{budgetPct}% budget</span>}
           {rank > 0.01 && <span className="text-destructive">{rankPct}% rank</span>}
         </div>
+      </div>
+    </TableCell>
+  );
+}
+
+function BudgetBar({
+  dailyBudget,
+  periodBudget,
+  spendRaw,
+}: {
+  dailyBudget: number;
+  periodBudget: number;
+  spendRaw: number;
+}) {
+  if (dailyBudget === 0) {
+    return <TableCell className="text-muted-foreground text-xs">—</TableCell>;
+  }
+
+  const utilization = periodBudget > 0 ? spendRaw / periodBudget : 0;
+  const clampedUtil = Math.min(utilization, 1);
+  const days = Math.round(periodBudget / dailyBudget);
+  const tooltip = `₹${spendRaw.toFixed(2)} spent of ₹${periodBudget.toFixed(2)} period budget (₹${dailyBudget.toFixed(2)}/day × ${days} days)`;
+
+  const barColor =
+    utilization < 0.7
+      ? "bg-green-500 dark:bg-green-600"
+      : utilization < 1.0
+        ? "bg-amber-400 dark:bg-amber-500"
+        : "bg-destructive";
+
+  return (
+    <TableCell title={tooltip}>
+      <div className="flex min-w-[140px] flex-col gap-1">
+        <div className="text-xs tabular-nums">{`₹${formatBudgetAmount(dailyBudget)}/day`}</div>
+        <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+          <div className={cn("h-full", barColor)} style={{ width: `${clampedUtil * 100}%` }} />
+        </div>
+        <div className="text-[10px] text-muted-foreground tabular-nums">{`${(utilization * 100).toFixed(0)}% of period budget`}</div>
       </div>
     </TableCell>
   );
@@ -96,7 +140,7 @@ function CampaignSortableTh({
   onToggle: (col: CampaignSortKey) => void;
 }) {
   return (
-    <TableHead className="cursor-pointer select-none text-right whitespace-nowrap" onClick={() => onToggle(col)}>
+    <TableHead className="cursor-pointer select-none whitespace-nowrap text-right" onClick={() => onToggle(col)}>
       {label} {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : ""}
     </TableHead>
   );
@@ -142,6 +186,7 @@ function CampaignsSummaryTable({ campaigns }: { campaigns: CampaignSummaryRow[] 
             >
               Impression Share{sortKey === "impressionShare" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
             </TableHead>
+            <TableHead className="whitespace-nowrap">Budget</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -155,6 +200,7 @@ function CampaignsSummaryTable({ campaigns }: { campaigns: CampaignSummaryRow[] 
               <TableCell className="text-right tabular-nums">{row.conversions.toLocaleString()}</TableCell>
               <TableCell className="text-right tabular-nums">{row.cpa}</TableCell>
               <IsBar is={row.impressionShare} lostBudget={row.lostIsBudget} lostRank={row.lostIsRank} />
+              <BudgetBar dailyBudget={row.dailyBudget} periodBudget={row.periodBudget} spendRaw={row.spendRaw} />
             </TableRow>
           ))}
         </TableBody>
