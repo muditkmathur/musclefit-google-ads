@@ -204,6 +204,9 @@ async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string
     const spendRaw = cost / 1_000_000;
     const cpaRaw = conv > 0 ? costPerConv / 1_000_000 : 0;
 
+    // campaign_budget.type (STANDARD = daily cap, FIXED = total lifetime budget) is
+    // fetched in the query for future use. All active campaigns on this account use
+    // STANDARD budgets, so amount_micros is treated as a daily cap here.
     const b = r.campaign_budget ?? {};
     const dailyBudget = Number(b.amount_micros ?? 0) / 1_000_000;
     const periodBudget = dailyBudget * rangeDays;
