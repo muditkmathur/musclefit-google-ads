@@ -10,7 +10,7 @@ import type { CampaignTotalsRaw } from "@/types/google-ads";
 
 type ImprovementDirection = "higher" | "lower";
 
-type MetricKey = keyof Pick<CampaignTotalsRaw, "impressions" | "clicks" | "ctr" | "spend" | "conversions">;
+type MetricKey = keyof Pick<CampaignTotalsRaw, "impressions" | "clicks" | "ctr" | "spend" | "conversions" | "cpa">;
 
 interface MetricSpec {
   key: MetricKey;
@@ -50,6 +50,12 @@ const METRICS: readonly MetricSpec[] = [
     improvement: "higher",
     format: (v) => formatCompactNumber(v),
   },
+  {
+    key: "cpa",
+    label: "CPA",
+    improvement: "lower",
+    format: (v) => (v > 0 ? `₹${formatCompactNumber(v)}` : "N/A"),
+  },
 ];
 
 function formatCompactNumber(n: number): string {
@@ -80,7 +86,7 @@ interface CampaignKpiStripProps {
 export function CampaignKpiStrip({ totals, previousTotals, rangeLabel, loading }: CampaignKpiStripProps) {
   return (
     <div className="overflow-hidden rounded-xl bg-card shadow-xs ring-1 ring-foreground/10">
-      <div className="grid divide-y *:data-[slot=card]:rounded-none *:data-[slot=card]:ring-0 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-5">
+      <div className="grid divide-y *:data-[slot=card]:rounded-none *:data-[slot=card]:ring-0 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-6">
         {METRICS.map((metric) => (
           <KpiCard
             key={metric.key}
