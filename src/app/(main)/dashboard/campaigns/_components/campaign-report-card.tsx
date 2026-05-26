@@ -259,7 +259,7 @@ function CampaignReportCardContent() {
 
   useEffect(() => {
     void fetchReport(dateRange, granularity);
-  }, [fetchReport, dateRange.start, dateRange.end, granularity, dateRange]);
+  }, [fetchReport, dateRange.start, dateRange.end, granularity]);
 
   useEffect(() => {
     const status = searchParams.get("google_ads_oauth");

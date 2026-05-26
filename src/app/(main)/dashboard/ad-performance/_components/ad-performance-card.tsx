@@ -324,7 +324,7 @@ function AdPerformanceCardContent() {
 
   useEffect(() => {
     void fetch(dateRange);
-  }, [fetch, dateRange.start, dateRange.end, dateRange]);
+  }, [fetch, dateRange.start, dateRange.end]);
 
   return (
     <Card>

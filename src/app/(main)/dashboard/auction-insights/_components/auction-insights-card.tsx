@@ -104,7 +104,7 @@ function AuctionInsightsCardContent() {
 
   useEffect(() => {
     void fetch(dateRange);
-  }, [fetch, dateRange.start, dateRange.end, dateRange]);
+  }, [fetch, dateRange.start, dateRange.end]);
 
   const byCampaign = useMemo(() => (report ? competitorsByCampaign(report.competitors) : new Map()), [report]);
 
