@@ -1,4 +1,6 @@
 import "dotenv/config";
+
+import { dateRangeForLastNDays } from "../src/lib/date-presets";
 import { runCampaignReport } from "../src/lib/google-ads/report";
 
 async function main() {
@@ -14,7 +16,7 @@ async function main() {
 
   try {
     const result = await runCampaignReport({
-      days,
+      dateRange: dateRangeForLastNDays(days),
       includeDaily,
       saveToDisk: true,
     });

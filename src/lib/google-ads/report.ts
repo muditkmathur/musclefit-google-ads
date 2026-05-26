@@ -7,7 +7,6 @@ import type {
   CampaignDemographicSlice,
   CampaignDemographicsReport,
   CampaignGranularity,
-  CampaignRangeKey,
   CampaignReport,
   CampaignSummaryRow,
   CampaignTotals,
@@ -16,6 +15,8 @@ import type {
   DemographicDimension,
   DiffValue,
 } from "@/types/google-ads";
+
+export { dateRangeForLastNDays, dateRangeForRangeKey } from "@/lib/date-presets";
 
 import { getCustomer, getCustomerId } from "./client";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -39,41 +40,6 @@ function daysBetween(start: Date, end: Date): number {
   return Math.round(ms / (1000 * 60 * 60 * 24)) + 1;
 }
 
-export function dateRangeForLastNDays(n: number): DateRange {
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - (n - 1));
-  return { start: formatYmd(start), end: formatYmd(end) };
-}
-
-export function dateRangeForRangeKey(range: CampaignRangeKey): DateRange {
-  const end = new Date();
-  if (range === "year-to-date") {
-    const start = new Date(end.getFullYear(), 0, 1);
-    return { start: formatYmd(start), end: formatYmd(end) };
-  }
-  const days = daysForRange(range);
-  const start = new Date(end);
-  start.setDate(start.getDate() - (days - 1));
-  return { start: formatYmd(start), end: formatYmd(end) };
-}
-
-function daysForRange(range: CampaignRangeKey): number {
-  switch (range) {
-    case "last-7-days":
-      return 7;
-    case "last-4-weeks":
-      return 28;
-    case "last-3-months":
-      return 90;
-    case "year-to-date": {
-      const now = new Date();
-      const start = new Date(now.getFullYear(), 0, 1);
-      return daysBetween(start, now);
-    }
-  }
-}
-
 function previousRange(current: DateRange): DateRange {
   const start = new Date(`${current.start}T00:00:00`);
   const end = new Date(`${current.end}T00:00:00`);
@@ -81,19 +47,6 @@ function previousRange(current: DateRange): DateRange {
   const prevEnd = addDays(start, -1);
   const prevStart = addDays(prevEnd, -(len - 1));
   return { start: formatYmd(prevStart), end: formatYmd(prevEnd) };
-}
-
-function rangeLabel(range: CampaignRangeKey): string {
-  switch (range) {
-    case "last-7-days":
-      return "Last 7 days";
-    case "last-4-weeks":
-      return "Last 4 weeks";
-    case "last-3-months":
-      return "Last 3 months";
-    case "year-to-date":
-      return "Year to date";
-  }
 }
 
 function directionForDelta(delta: number): DiffValue["direction"] {
@@ -108,17 +61,10 @@ function diff(prev: number, curr: number): DiffValue {
 }
 
 export interface RunCampaignReportOptions {
-  /** Preferred input. Computed range key. */
-  range?: CampaignRangeKey;
-  /** Metadata only — pass-through to the returned report. */
+  dateRange: DateRange;
   granularity?: CampaignGranularity;
-  /** Backwards-compatible: if `range` is not provided, use `days` for an ad-hoc window. */
-  days?: number;
-  /** Whether to include daily breakdown in the result. Defaults to true. */
   includeDaily?: boolean;
-  /** Whether to include demographic breakdown in the result. Defaults to true. */
   includeDemographics?: boolean;
-  /** Whether to include previous-period totals. Defaults to true. */
   includePrevious?: boolean;
   saveToDisk?: boolean;
   outputDir?: string;
@@ -265,24 +211,18 @@ async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string
   return { campaigns, totals, totalsRaw } satisfies CampaignQueryResult & AggregatedTotals;
 }
 
-export async function runCampaignReport(options: RunCampaignReportOptions = {}): Promise<RunCampaignReportResult> {
-  const range: CampaignRangeKey = options.range ?? "last-4-weeks";
+export async function runCampaignReport(options: RunCampaignReportOptions): Promise<RunCampaignReportResult> {
+  const { dateRange } = options;
   const granularity: CampaignGranularity = options.granularity ?? "day";
   const includeDaily = options.includeDaily ?? true;
   const includeDemographics = options.includeDemographics ?? false;
   const includePrevious = options.includePrevious ?? true;
   const saveToDisk = options.saveToDisk ?? false;
 
-  // If a custom `days` is provided and no `range`, build an ad-hoc range.
-  const dateRange =
-    options.range === undefined && options.days !== undefined
-      ? dateRangeForLastNDays(Math.max(1, Math.floor(options.days)))
-      : dateRangeForRangeKey(range);
-
   const { start: rangeStart, end: rangeEnd } = dateRange;
-  const periodLabel = rangeLabel(range);
-
+  const period = `${rangeStart} to ${rangeEnd}`;
   const forceRefresh = options.forceRefresh === true;
+
   const current = await queryCampaignSummary(rangeStart, rangeEnd, { forceRefresh });
 
   const previousDateRange = previousRange(dateRange);
@@ -294,8 +234,7 @@ export async function runCampaignReport(options: RunCampaignReportOptions = {}):
   const generatedAt = new Date().toISOString();
   const result: CampaignReport = {
     generated_at: generatedAt,
-    period: periodLabel,
-    range,
+    period,
     granularity,
     date_range: dateRange,
     previous_date_range: previousDateRange,
@@ -332,7 +271,7 @@ export async function runCampaignReport(options: RunCampaignReportOptions = {}):
     daily = await getCampaignDailyReport({
       rangeStart,
       rangeEnd,
-      periodLabel,
+      periodLabel: period,
       forceRefresh,
     });
     result.daily = daily;
@@ -344,12 +283,11 @@ export async function runCampaignReport(options: RunCampaignReportOptions = {}):
       demographics = await getCampaignDemographicsReport({
         rangeStart,
         rangeEnd,
-        periodLabel,
+        periodLabel: period,
         forceRefresh,
       });
       result.demographics = demographics;
     } catch (err) {
-      // Demographics are an enhancement; surface failures via logs but keep the rest of the report intact.
       console.warn("[report] Failed to fetch demographics; continuing without demographics section.", err);
     }
   }
@@ -358,30 +296,23 @@ export async function runCampaignReport(options: RunCampaignReportOptions = {}):
     const outputDir = options.outputDir ?? join(process.cwd(), "output", "reports");
     await mkdir(outputDir, { recursive: true });
     const timestamp = generatedAt.replace(/[:.]/g, "-");
-    const summaryFilename = join(outputDir, `campaign-report-${range}-${timestamp}.json`);
+    const tag = `${rangeStart}_${rangeEnd}`;
+    const summaryFilename = join(outputDir, `campaign-report-${tag}-${timestamp}.json`);
     await writeFile(summaryFilename, JSON.stringify(result, null, 2), "utf8");
     result.saved_to = { summary: summaryFilename };
 
     if (daily) {
-      const dailyFilename = join(outputDir, `campaign-report-daily-${range}-${timestamp}.json`);
+      const dailyFilename = join(outputDir, `campaign-report-daily-${tag}-${timestamp}.json`);
       await mkdir(dirname(dailyFilename), { recursive: true });
       await writeFile(dailyFilename, JSON.stringify(daily, null, 2), "utf8");
-      result.saved_to = {
-        ...(result.saved_to ?? { summary: summaryFilename }),
-        summary: summaryFilename,
-        daily: dailyFilename,
-      };
+      result.saved_to = { ...result.saved_to, daily: dailyFilename };
     }
 
     if (demographics) {
-      const demographicsFilename = join(outputDir, `campaign-report-demographics-${range}-${timestamp}.json`);
+      const demographicsFilename = join(outputDir, `campaign-report-demographics-${tag}-${timestamp}.json`);
       await mkdir(dirname(demographicsFilename), { recursive: true });
       await writeFile(demographicsFilename, JSON.stringify(demographics, null, 2), "utf8");
-      result.saved_to = {
-        ...(result.saved_to ?? { summary: summaryFilename }),
-        summary: summaryFilename,
-        demographics: demographicsFilename,
-      };
+      result.saved_to = { ...result.saved_to, demographics: demographicsFilename };
     }
   }
 
