@@ -1,40 +1,41 @@
 import { buildCacheKey, getOrSetJson } from "@/lib/cache/query-cache";
 import { CACHE_TTL_SECONDS } from "@/lib/cache/redis";
-import type { CampaignRangeKey, DevicePerformanceReport, DeviceRow } from "@/types/google-ads";
+import type { DateRange, DevicePerformanceReport, DeviceRow } from "@/types/google-ads";
 
 import { getCustomer, getCustomerId } from "./client";
-import { dateRangeForRangeKey } from "./report";
 
 const DEVICE_LABELS: Record<string, string> = {
-  "2": "Desktop",
-  DESKTOP: "Desktop",
-  "4": "Mobile",
+  "2": "Mobile",
   MOBILE: "Mobile",
-  "5": "Tablet",
+  "3": "Tablet",
   TABLET: "Tablet",
+  "4": "Desktop",
+  DESKTOP: "Desktop",
+  "5": "Other",
+  OTHER: "Other",
   "6": "Connected TV",
   CONNECTED_TV: "Connected TV",
-  "7": "Smart TV",
-  SMART_TV: "Smart TV",
-  "8": "Other",
-  OTHER: "Other",
 };
 
 export interface RunDevicePerformanceOptions {
-  range: CampaignRangeKey;
+  dateRange: DateRange;
   forceRefresh?: boolean;
 }
 
 export async function runDevicePerformance(options: RunDevicePerformanceOptions): Promise<DevicePerformanceReport> {
-  const dateRange = dateRangeForRangeKey(options.range);
   const cacheKey = buildCacheKey("device:v1", {
     customerId: getCustomerId(),
-    rangeStart: dateRange.start,
-    rangeEnd: dateRange.end,
+    rangeStart: options.dateRange.start,
+    rangeEnd: options.dateRange.end,
   });
-  return getOrSetJson<DevicePerformanceReport>(cacheKey, () => fetchDevicePerformance(dateRange), CACHE_TTL_SECONDS, {
-    forceRefresh: options.forceRefresh === true,
-  });
+  return getOrSetJson<DevicePerformanceReport>(
+    cacheKey,
+    () => fetchDevicePerformance(options.dateRange),
+    CACHE_TTL_SECONDS,
+    {
+      forceRefresh: options.forceRefresh === true,
+    },
+  );
 }
 
 async function fetchDevicePerformance(dateRange: { start: string; end: string }): Promise<DevicePerformanceReport> {

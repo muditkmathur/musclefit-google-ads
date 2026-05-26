@@ -1,7 +1,7 @@
 import { buildCacheKey, getOrSetJson } from "@/lib/cache/query-cache";
 import { CACHE_TTL_SECONDS } from "@/lib/cache/redis";
 import type {
-  CampaignRangeKey,
+  DateRange,
   QualityScoreBottleneck,
   QualityScoreComponent,
   QualityScoreReport,
@@ -9,7 +9,6 @@ import type {
 } from "@/types/google-ads";
 
 import { getCustomer, getCustomerId } from "./client";
-import { dateRangeForRangeKey } from "./report";
 
 const COMPONENT_MAP: Record<string, QualityScoreComponent> = {
   "2": "BELOW_AVERAGE",
@@ -57,21 +56,18 @@ function classifyBottleneck(
 }
 
 export interface RunQualityScoreOptions {
-  range?: CampaignRangeKey;
+  dateRange: DateRange;
   forceRefresh?: boolean;
 }
 
-export async function runQualityScore(options: RunQualityScoreOptions = {}): Promise<QualityScoreReport> {
-  const range: CampaignRangeKey = options.range ?? "last-4-weeks";
-  const dateRange = dateRangeForRangeKey(range);
-
+export async function runQualityScore(options: RunQualityScoreOptions): Promise<QualityScoreReport> {
   const cacheKey = buildCacheKey("quality-score:v4", {
     customerId: getCustomerId(),
-    rangeStart: dateRange.start,
-    rangeEnd: dateRange.end,
+    rangeStart: options.dateRange.start,
+    rangeEnd: options.dateRange.end,
   });
 
-  return getOrSetJson<QualityScoreReport>(cacheKey, () => fetchQualityScore(dateRange), CACHE_TTL_SECONDS, {
+  return getOrSetJson<QualityScoreReport>(cacheKey, () => fetchQualityScore(options.dateRange), CACHE_TTL_SECONDS, {
     forceRefresh: options.forceRefresh === true,
   });
 }

@@ -1,15 +1,8 @@
 import { buildCacheKey, getOrSetJson } from "@/lib/cache/query-cache";
 import { CACHE_TTL_SECONDS } from "@/lib/cache/redis";
-import type {
-  CampaignRangeKey,
-  DateRange,
-  DayOfWeek,
-  ScheduleCell,
-  SchedulePerformanceReport,
-} from "@/types/google-ads";
+import type { DateRange, DayOfWeek, ScheduleCell, SchedulePerformanceReport } from "@/types/google-ads";
 
 import { getCustomer, getCustomerId } from "./client";
-import { dateRangeForRangeKey } from "./report";
 
 const DAY_OF_WEEK_MAP: Record<string, DayOfWeek> = {
   "2": "MONDAY",
@@ -29,22 +22,21 @@ const DAY_OF_WEEK_MAP: Record<string, DayOfWeek> = {
 };
 
 export interface RunSchedulePerformanceOptions {
-  range: CampaignRangeKey;
+  dateRange: DateRange;
   forceRefresh?: boolean;
 }
 
 export async function runSchedulePerformance(
   options: RunSchedulePerformanceOptions,
 ): Promise<SchedulePerformanceReport> {
-  const dateRange = dateRangeForRangeKey(options.range);
   const cacheKey = buildCacheKey("schedule:v1", {
     customerId: getCustomerId(),
-    rangeStart: dateRange.start,
-    rangeEnd: dateRange.end,
+    rangeStart: options.dateRange.start,
+    rangeEnd: options.dateRange.end,
   });
   return getOrSetJson<SchedulePerformanceReport>(
     cacheKey,
-    () => fetchSchedulePerformance(dateRange),
+    () => fetchSchedulePerformance(options.dateRange),
     CACHE_TTL_SECONDS,
     { forceRefresh: options.forceRefresh === true },
   );

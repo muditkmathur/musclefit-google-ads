@@ -1,9 +1,8 @@
 import { buildCacheKey, getOrSetJson } from "@/lib/cache/query-cache";
 import { CACHE_TTL_SECONDS } from "@/lib/cache/redis";
-import type { AdGroupReport, AdGroupRow, CampaignRangeKey } from "@/types/google-ads";
+import type { AdGroupReport, AdGroupRow, DateRange } from "@/types/google-ads";
 
 import { getCustomer, getCustomerId } from "./client";
-import { dateRangeForRangeKey } from "./report";
 
 function parseIsFraction(raw: unknown): number | null {
   if (raw === null || raw === undefined) return null;
@@ -12,18 +11,17 @@ function parseIsFraction(raw: unknown): number | null {
 }
 
 export interface RunAdGroupReportOptions {
-  range: CampaignRangeKey;
+  dateRange: DateRange;
   forceRefresh?: boolean;
 }
 
 export async function runAdGroupReport(options: RunAdGroupReportOptions): Promise<AdGroupReport> {
-  const dateRange = dateRangeForRangeKey(options.range);
   const cacheKey = buildCacheKey("ad-groups:v1", {
     customerId: getCustomerId(),
-    rangeStart: dateRange.start,
-    rangeEnd: dateRange.end,
+    rangeStart: options.dateRange.start,
+    rangeEnd: options.dateRange.end,
   });
-  return getOrSetJson<AdGroupReport>(cacheKey, () => fetchAdGroupReport(dateRange), CACHE_TTL_SECONDS, {
+  return getOrSetJson<AdGroupReport>(cacheKey, () => fetchAdGroupReport(options.dateRange), CACHE_TTL_SECONDS, {
     forceRefresh: options.forceRefresh === true,
   });
 }
