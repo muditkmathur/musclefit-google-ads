@@ -18,19 +18,22 @@ import { runCampaignReport } from "../src/lib/google-ads/report";
 import { runSchedulePerformance } from "../src/lib/google-ads/schedule-performance";
 import { runSearchTermsReport } from "../src/lib/google-ads/search-terms";
 
-const RANGES = ["last-7-days", "last-4-weeks", "last-3-months", "year-to-date"] as const;
 const GRANULARITIES = ["day", "week", "month"] as const;
-
-const rangeSchema = z
-  .enum(RANGES)
-  .default("last-4-weeks")
-  .describe('Date range: "last-7-days" | "last-4-weeks" | "last-3-months" | "year-to-date"');
 
 const forceRefreshSchema = z
   .boolean()
   .optional()
   .default(false)
   .describe("Bypass Redis cache and fetch fresh data from the API");
+
+const startDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .describe("Start date in YYYY-MM-DD format");
+const endDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .describe("End date in YYYY-MM-DD format");
 
 const server = new McpServer({ name: "google-ads", version: "1.0.0" });
 
@@ -49,7 +52,8 @@ server.tool(
   "get_campaign_report",
   "Campaign performance summary with optional daily breakdown and demographic data. Returns impressions, clicks, spend, conversions, CTR, CPC, and impression share per campaign plus account totals. Each campaign row includes dailyBudget (INR/day cap from Google Ads) and periodBudget (dailyBudget × days in range) for budget utilization analysis.",
   {
-    range: rangeSchema,
+    start_date: startDateSchema,
+    end_date: endDateSchema,
     granularity: z
       .enum(GRANULARITIES)
       .default("day")
@@ -58,10 +62,10 @@ server.tool(
     include_demographics: z.boolean().optional().default(false).describe("Include age/gender demographic breakdown"),
     force_refresh: forceRefreshSchema,
   },
-  async ({ range, granularity, include_daily, include_demographics, force_refresh }) => {
+  async ({ start_date, end_date, granularity, include_daily, include_demographics, force_refresh }) => {
     try {
       const data = await runCampaignReport({
-        range,
+        dateRange: { start: start_date, end: end_date },
         granularity,
         includeDaily: include_daily,
         includeDemographics: include_demographics,
@@ -128,12 +132,16 @@ server.tool(
   "get_ad_groups",
   "Ad group performance metrics: impressions, clicks, spend, conversions, CTR, CPC, impression share per ad group.",
   {
-    range: rangeSchema,
+    start_date: startDateSchema,
+    end_date: endDateSchema,
     force_refresh: forceRefreshSchema,
   },
-  async ({ range, force_refresh }) => {
+  async ({ start_date, end_date, force_refresh }) => {
     try {
-      const data = await runAdGroupReport({ range, forceRefresh: force_refresh });
+      const data = await runAdGroupReport({
+        dateRange: { start: start_date, end: end_date },
+        forceRefresh: force_refresh,
+      });
       return ok(data);
     } catch (err) {
       return fail(err);
@@ -145,12 +153,16 @@ server.tool(
   "get_device_performance",
   "Performance split by device type: Desktop, Mobile, Tablet, Connected TV. Useful for bid modifier decisions.",
   {
-    range: rangeSchema,
+    start_date: startDateSchema,
+    end_date: endDateSchema,
     force_refresh: forceRefreshSchema,
   },
-  async ({ range, force_refresh }) => {
+  async ({ start_date, end_date, force_refresh }) => {
     try {
-      const data = await runDevicePerformance({ range, forceRefresh: force_refresh });
+      const data = await runDevicePerformance({
+        dateRange: { start: start_date, end: end_date },
+        forceRefresh: force_refresh,
+      });
       return ok(data);
     } catch (err) {
       return fail(err);
@@ -162,12 +174,16 @@ server.tool(
   "get_quality_score",
   "Keyword quality scores with expected CTR, ad relevance, and landing page experience components. Low QS increases CPC.",
   {
-    range: rangeSchema,
+    start_date: startDateSchema,
+    end_date: endDateSchema,
     force_refresh: forceRefreshSchema,
   },
-  async ({ range, force_refresh }) => {
+  async ({ start_date, end_date, force_refresh }) => {
     try {
-      const data = await runQualityScore({ range, forceRefresh: force_refresh });
+      const data = await runQualityScore({
+        dateRange: { start: start_date, end: end_date },
+        forceRefresh: force_refresh,
+      });
       return ok(data);
     } catch (err) {
       return fail(err);
@@ -179,12 +195,16 @@ server.tool(
   "get_schedule_performance",
   "Hour-of-day × day-of-week heatmap: clicks, impressions, spend, conversions by time slot. Use for ad scheduling bid adjustments.",
   {
-    range: rangeSchema,
+    start_date: startDateSchema,
+    end_date: endDateSchema,
     force_refresh: forceRefreshSchema,
   },
-  async ({ range, force_refresh }) => {
+  async ({ start_date, end_date, force_refresh }) => {
     try {
-      const data = await runSchedulePerformance({ range, forceRefresh: force_refresh });
+      const data = await runSchedulePerformance({
+        dateRange: { start: start_date, end: end_date },
+        forceRefresh: force_refresh,
+      });
       return ok(data);
     } catch (err) {
       return fail(err);
@@ -243,14 +263,15 @@ server.tool(
   "get_landing_page_report",
   "Landing page performance — spend, conversions, CTR, CPA per unexpanded final URL. Includes which ad groups point to each URL and a waste flag (spend ≥ ₹500 with 0 conversions). Use to find LPs that need rework when QS landing-page-experience is low.",
   {
-    range: rangeSchema,
+    start_date: startDateSchema,
+    end_date: endDateSchema,
     campaign: z.string().optional().describe("Filter to a specific campaign by name (partial match)"),
     force_refresh: forceRefreshSchema,
   },
-  async ({ range, campaign, force_refresh }) => {
+  async ({ start_date, end_date, campaign, force_refresh }) => {
     try {
       const data = await runLandingPageReport({
-        range,
+        dateRange: { start: start_date, end: end_date },
         campaign: campaign ?? null,
         forceRefresh: force_refresh,
       });
@@ -265,7 +286,8 @@ server.tool(
   "get_keyword_search_term_map",
   "Maps each search term back to the triggering keyword and match type, with per-row spend/conversions plus intent-mismatch, broad-trigger, and waste flags. Use to spot broad keywords pulling irrelevant traffic.",
   {
-    range: rangeSchema,
+    start_date: startDateSchema,
+    end_date: endDateSchema,
     campaign: z.string().optional().describe("Filter to a specific campaign by name (partial match)"),
     top: z
       .number()
@@ -277,10 +299,10 @@ server.tool(
       .describe("Cap the result set to top N rows by spend (default 300, max 1000)"),
     force_refresh: forceRefreshSchema,
   },
-  async ({ range, campaign, top, force_refresh }) => {
+  async ({ start_date, end_date, campaign, top, force_refresh }) => {
     try {
       const data = await runKeywordSearchTermMap({
-        range,
+        dateRange: { start: start_date, end: end_date },
         campaign: campaign ?? null,
         top,
         forceRefresh: force_refresh,
@@ -296,14 +318,15 @@ server.tool(
   "get_ad_performance",
   "Ad-level performance with RSA ad strength and per-asset (headline/description) performance labels (BEST/GOOD/LOW/LEARNING). Use to identify weak ads, weak assets, and ads that need refreshing.",
   {
-    range: rangeSchema,
+    start_date: startDateSchema,
+    end_date: endDateSchema,
     campaign: z.string().optional().describe("Filter to a specific campaign by name (partial match)"),
     force_refresh: forceRefreshSchema,
   },
-  async ({ range, campaign, force_refresh }) => {
+  async ({ start_date, end_date, campaign, force_refresh }) => {
     try {
       const data = await runAdPerformance({
-        range,
+        dateRange: { start: start_date, end: end_date },
         campaign: campaign ?? null,
         forceRefresh: force_refresh,
       });
@@ -318,14 +341,15 @@ server.tool(
   "get_auction_insights",
   "Competitor auction insights — domains you compete with on Search keywords, with impression share, overlap rate, position-above rate, and outranking share. Use to explain Lost IS (rank). Search campaigns only; sparse when keyword volume is low.",
   {
-    range: rangeSchema,
+    start_date: startDateSchema,
+    end_date: endDateSchema,
     campaign: z.string().optional().describe("Filter to a specific campaign by name (partial match)"),
     force_refresh: forceRefreshSchema,
   },
-  async ({ range, campaign, force_refresh }) => {
+  async ({ start_date, end_date, campaign, force_refresh }) => {
     try {
       const data = await runAuctionInsights({
-        range,
+        dateRange: { start: start_date, end: end_date },
         campaign: campaign ?? null,
         forceRefresh: force_refresh,
       });
