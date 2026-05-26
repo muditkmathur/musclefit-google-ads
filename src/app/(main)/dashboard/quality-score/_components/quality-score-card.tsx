@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 
 import { getQualityScore } from "@/app/actions/google-ads";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,21 +13,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { last30Days } from "@/lib/date-presets";
 import { cn } from "@/lib/utils";
 import type {
-  CampaignRangeKey,
+  DateRange,
   QualityScoreBottleneck,
   QualityScoreComponent,
   QualityScoreReport,
   QualityScoreRow,
 } from "@/types/google-ads";
-
-const RANGE_OPTIONS: ReadonlyArray<{ value: CampaignRangeKey; label: string }> = [
-  { value: "last-7-days", label: "Last 7 days" },
-  { value: "last-4-weeks", label: "Last 4 weeks" },
-  { value: "last-3-months", label: "Last 3 months" },
-  { value: "year-to-date", label: "Year to date" },
-];
 
 const TABLE_HEAD_STICKY =
   "sticky top-0 z-10 bg-muted/90 text-foreground shadow-[0_1px_0_hsl(var(--border))] backdrop-blur-sm";
@@ -70,7 +65,7 @@ function QsScore({ score }: { score: number | null }) {
         : "text-destructive";
   return (
     <TableCell className="text-center">
-      <span className={cn("font-semibold tabular-nums text-sm", color)}>{score}</span>
+      <span className={cn("font-semibold text-sm tabular-nums", color)}>{score}</span>
       <span className="text-muted-foreground text-xs">/10</span>
     </TableCell>
   );
@@ -112,7 +107,7 @@ function BottleneckCell({ value }: { value: QualityScoreBottleneck }) {
   const cfg = BOTTLENECK_CONFIG[value];
   return (
     <TableCell title={cfg.description}>
-      <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-medium", cfg.className)}>{cfg.label}</span>
+      <span className={cn("rounded px-1.5 py-0.5 font-medium text-[11px]", cfg.className)}>{cfg.label}</span>
     </TableCell>
   );
 }
@@ -128,16 +123,16 @@ function CpcCell({ maxBid, avgCpc, firstPage }: { maxBid: number | null; avgCpc:
       : `Max bid: ₹${maxBid?.toFixed(2)} · Avg CPC paid: ₹${avgCpc.toFixed(2)}`;
 
   return (
-    <TableCell className="text-right tabular-nums text-xs" title={title}>
+    <TableCell className="text-right text-xs tabular-nums" title={title}>
       {smartBidding ? (
-        <span className="text-muted-foreground text-[10px]">Smart bidding</span>
+        <span className="text-[10px] text-muted-foreground">Smart bidding</span>
       ) : (
         <>
-          <span className={cn(bidLow ? "text-amber-600 dark:text-amber-400 font-medium" : "")}>
+          <span className={cn(bidLow ? "font-medium text-amber-600 dark:text-amber-400" : "")}>
             ₹{maxBid?.toFixed(2)}
           </span>
           {firstPage !== null && (
-            <span className="ml-1 text-muted-foreground text-[10px]">/ ₹{firstPage.toFixed(2)}</span>
+            <span className="ml-1 text-[10px] text-muted-foreground">/ ₹{firstPage.toFixed(2)}</span>
           )}
         </>
       )}
@@ -185,7 +180,7 @@ function QualityScoreHelp() {
     <div className="rounded-lg border bg-muted/30">
       <button
         type="button"
-        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium"
+        className="flex w-full items-center justify-between px-4 py-3 text-left font-medium text-sm"
         onClick={() => setOpen((o) => !o)}
       >
         <span>What do these columns mean?</span>
@@ -197,11 +192,11 @@ function QualityScoreHelp() {
       </button>
 
       {open && (
-        <div className="border-t px-4 pb-4 pt-3">
+        <div className="border-t px-4 pt-3 pb-4">
           <dl className="space-y-4">
             {HELP_ITEMS.map(({ term, definition }) => (
               <div key={term}>
-                <dt className="mb-0.5 text-xs font-semibold text-foreground">{term}</dt>
+                <dt className="mb-0.5 font-semibold text-foreground text-xs">{term}</dt>
                 <dd className="text-muted-foreground text-xs leading-relaxed">{definition}</dd>
               </div>
             ))}
@@ -365,7 +360,7 @@ function QualityScoreTable({ report }: { report: QualityScoreReport }) {
                   {row.keyword}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-xs">{row.matchType}</TableCell>
-                <TableCell className="max-w-[160px] truncate text-xs text-muted-foreground" title={row.campaign}>
+                <TableCell className="max-w-[160px] truncate text-muted-foreground text-xs" title={row.campaign}>
                   {row.campaign}
                 </TableCell>
                 <QsScore score={row.qualityScore} />
@@ -374,9 +369,9 @@ function QualityScoreTable({ report }: { report: QualityScoreReport }) {
                 <ComponentCell value={row.landingPageExperience} />
                 <BottleneckCell value={row.bottleneck} />
                 <CpcCell maxBid={row.maxCpcBid} avgCpc={row.avgCpc} firstPage={row.firstPageCpc} />
-                <TableCell className="text-right tabular-nums text-xs">₹{row.spend.toFixed(2)}</TableCell>
-                <TableCell className="text-right tabular-nums text-xs">{row.clicks.toLocaleString()}</TableCell>
-                <TableCell className="text-right tabular-nums text-xs">{row.conversions.toLocaleString()}</TableCell>
+                <TableCell className="text-right text-xs tabular-nums">₹{row.spend.toFixed(2)}</TableCell>
+                <TableCell className="text-right text-xs tabular-nums">{row.clicks.toLocaleString()}</TableCell>
+                <TableCell className="text-right text-xs tabular-nums">{row.conversions.toLocaleString()}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -387,16 +382,16 @@ function QualityScoreTable({ report }: { report: QualityScoreReport }) {
 }
 
 function QualityScoreCardContent() {
-  const [range, setRange] = useState<CampaignRangeKey>("last-4-weeks");
+  const [dateRange, setDateRange] = useState<DateRange>(() => last30Days());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<QualityScoreReport | null>(null);
 
-  const fetch = useCallback(async (r: CampaignRangeKey, opts: { forceRefresh?: boolean } = {}) => {
+  const fetch = useCallback(async (dr: DateRange, opts: { forceRefresh?: boolean } = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await getQualityScore({ range: r, forceRefresh: Boolean(opts.forceRefresh) });
+      const res = await getQualityScore({ start: dr.start, end: dr.end, forceRefresh: Boolean(opts.forceRefresh) });
       if (!res.ok) throw new Error(res.error);
       setReport(res.data);
     } catch (err) {
@@ -407,8 +402,8 @@ function QualityScoreCardContent() {
   }, []);
 
   useEffect(() => {
-    void fetch(range);
-  }, [fetch, range]);
+    void fetch(dateRange);
+  }, [fetch, dateRange.start, dateRange.end, dateRange]);
 
   return (
     <Card>
@@ -421,20 +416,7 @@ function QualityScoreCardContent() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={range} onValueChange={(v) => setRange(v as CampaignRangeKey)}>
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {RANGE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
 
           {report && !loading && (
             <span className="text-muted-foreground text-xs">
@@ -446,7 +428,7 @@ function QualityScoreCardContent() {
             type="button"
             variant="outline"
             size="icon"
-            onClick={() => void fetch(range, { forceRefresh: true })}
+            onClick={() => void fetch(dateRange, { forceRefresh: true })}
             disabled={loading}
             className="ml-auto"
             aria-label="Refresh"

@@ -8,14 +8,16 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 
 import { getCampaignReport } from "@/app/actions/google-ads";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { last30Days } from "@/lib/date-presets";
 import { cn } from "@/lib/utils";
-import type { CampaignGranularity, CampaignRangeKey, CampaignReport, CampaignSummaryRow } from "@/types/google-ads";
+import type { CampaignGranularity, CampaignReport, CampaignSummaryRow, DateRange } from "@/types/google-ads";
 
 import { CampaignDailyReportSection } from "./campaign-daily-report";
 import { CampaignKpiStrip } from "./campaign-kpi-strip";
@@ -209,22 +211,11 @@ function CampaignsSummaryTable({ campaigns }: { campaigns: CampaignSummaryRow[] 
   );
 }
 
-const RANGE_OPTIONS: ReadonlyArray<{ value: CampaignRangeKey; label: string }> = [
-  { value: "last-7-days", label: "Last 7 days" },
-  { value: "last-4-weeks", label: "Last 4 weeks" },
-  { value: "last-3-months", label: "Last 3 months" },
-  { value: "year-to-date", label: "Year to date" },
-];
-
 const GRANULARITY_OPTIONS: ReadonlyArray<{ value: CampaignGranularity; label: string }> = [
   { value: "day", label: "Day" },
   { value: "week", label: "Week" },
   { value: "month", label: "Month" },
 ];
-
-function rangeLabel(range: CampaignRangeKey): string {
-  return RANGE_OPTIONS.find((o) => o.value === range)?.label ?? "Selected period";
-}
 
 type OauthNotice = { variant: "default" | "destructive"; title: string; description: string } | null;
 
@@ -233,7 +224,7 @@ function CampaignReportCardContent() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [range, setRange] = useState<CampaignRangeKey>("last-4-weeks");
+  const [dateRange, setDateRange] = useState<DateRange>(() => last30Days());
   const [granularity, setGranularity] = useState<CampaignGranularity>("day");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -242,7 +233,7 @@ function CampaignReportCardContent() {
 
   const fetchReport = useCallback(
     async (
-      selectedRange: CampaignRangeKey,
+      selectedDateRange: DateRange,
       selectedGranularity: CampaignGranularity,
       options: { forceRefresh?: boolean } = {},
     ) => {
@@ -250,7 +241,8 @@ function CampaignReportCardContent() {
       setError(null);
       try {
         const result = await getCampaignReport({
-          range: selectedRange,
+          start: selectedDateRange.start,
+          end: selectedDateRange.end,
           granularity: selectedGranularity,
           forceRefresh: Boolean(options.forceRefresh),
         });
@@ -266,8 +258,8 @@ function CampaignReportCardContent() {
   );
 
   useEffect(() => {
-    void fetchReport(range, granularity);
-  }, [fetchReport, range, granularity]);
+    void fetchReport(dateRange, granularity);
+  }, [fetchReport, dateRange.start, dateRange.end, granularity, dateRange]);
 
   useEffect(() => {
     const status = searchParams.get("google_ads_oauth");
@@ -284,7 +276,7 @@ function CampaignReportCardContent() {
           title: "Google Ads connected",
           description: "Your refresh token was saved. The report below will load with your authorized account.",
         });
-        void fetchReport(range, granularity);
+        void fetchReport(dateRange, granularity);
         break;
       case "denied":
         setOauthNotice({
@@ -320,9 +312,7 @@ function CampaignReportCardContent() {
     }
 
     router.replace(pathname, { scroll: false });
-  }, [searchParams, pathname, router, range, granularity, fetchReport]);
-
-  const currentLabel = rangeLabel(range);
+  }, [searchParams, pathname, router, dateRange, granularity, fetchReport]);
 
   return (
     <Card>
@@ -333,20 +323,7 @@ function CampaignReportCardContent() {
       <CardContent className="space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="flex items-center gap-2">
-            <Select value={range} onValueChange={(v) => setRange(v as CampaignRangeKey)}>
-              <SelectTrigger className="w-36" aria-label="Date range">
-                <SelectValue placeholder="Range" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {RANGE_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+            <DateRangePicker value={dateRange} onChange={setDateRange} />
 
             <Select value={granularity} onValueChange={(v) => setGranularity(v as CampaignGranularity)}>
               <SelectTrigger className="w-28" aria-label="Granularity">
@@ -378,7 +355,7 @@ function CampaignReportCardContent() {
             type="button"
             variant="outline"
             size="icon"
-            onClick={() => void fetchReport(range, granularity, { forceRefresh: true })}
+            onClick={() => void fetchReport(dateRange, granularity, { forceRefresh: true })}
             disabled={loading}
             className="sm:ml-auto"
             aria-label="Refresh report"
@@ -404,7 +381,7 @@ function CampaignReportCardContent() {
         <CampaignKpiStrip
           totals={report?.totals_raw ?? null}
           previousTotals={report?.previous_totals_raw ?? null}
-          rangeLabel={currentLabel}
+          rangeLabel={`${dateRange.start} – ${dateRange.end}`}
           loading={loading && !report}
         />
 

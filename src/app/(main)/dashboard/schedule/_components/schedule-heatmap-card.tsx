@@ -5,20 +5,15 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { getSchedulePerformance } from "@/app/actions/google-ads";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { last30Days } from "@/lib/date-presets";
 import { cn } from "@/lib/utils";
-import type { CampaignRangeKey, DayOfWeek, SchedulePerformanceReport } from "@/types/google-ads";
-
-const RANGE_OPTIONS: ReadonlyArray<{ value: CampaignRangeKey; label: string }> = [
-  { value: "last-7-days", label: "Last 7 days" },
-  { value: "last-4-weeks", label: "Last 4 weeks" },
-  { value: "last-3-months", label: "Last 3 months" },
-  { value: "year-to-date", label: "Year to date" },
-];
+import type { DateRange, DayOfWeek, SchedulePerformanceReport } from "@/types/google-ads";
 
 type MetricKey = "spend" | "clicks" | "conversions" | "impressions";
 
@@ -91,7 +86,7 @@ function ScheduleHeatmap({ report, metric }: { report: SchedulePerformanceReport
         {/* Day rows */}
         {DAY_ORDER.map((day) => (
           <div key={day} className="flex items-center gap-0">
-            <div className="w-12 shrink-0 text-right pr-2 text-xs text-muted-foreground">{DAY_LABELS[day]}</div>
+            <div className="w-12 shrink-0 pr-2 text-right text-muted-foreground text-xs">{DAY_LABELS[day]}</div>
             {Array.from({ length: 24 }, (_, h) => {
               const val = cellValue(report, day, h, metric);
               const intensity = maxValue > 0 ? val / maxValue : 0;
@@ -99,7 +94,7 @@ function ScheduleHeatmap({ report, metric }: { report: SchedulePerformanceReport
                 <div
                   key={h}
                   className={cn(
-                    "flex-1 h-8 border border-background/50 rounded-sm transition-colors",
+                    "h-8 flex-1 rounded-sm border border-background/50 transition-colors",
                     intensityClass(intensity),
                   )}
                   title={cellTooltip(report, day, h)}
@@ -111,11 +106,11 @@ function ScheduleHeatmap({ report, metric }: { report: SchedulePerformanceReport
 
         {/* Color scale legend */}
         <div className="mt-3 flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Low</span>
+          <span className="text-muted-foreground text-xs">Low</span>
           {[0.05, 0.2, 0.4, 0.6, 0.8, 1].map((v) => (
             <div key={v} className={cn("h-3 w-6 rounded-sm", intensityClass(v))} />
           ))}
-          <span className="text-xs text-muted-foreground">High</span>
+          <span className="text-muted-foreground text-xs">High</span>
         </div>
       </div>
     </div>
@@ -123,17 +118,21 @@ function ScheduleHeatmap({ report, metric }: { report: SchedulePerformanceReport
 }
 
 function ScheduleHeatmapCardContent() {
-  const [range, setRange] = useState<CampaignRangeKey>("last-4-weeks");
+  const [dateRange, setDateRange] = useState<DateRange>(() => last30Days());
   const [metric, setMetric] = useState<MetricKey>("spend");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<SchedulePerformanceReport | null>(null);
 
-  const fetch = useCallback(async (r: CampaignRangeKey, opts: { forceRefresh?: boolean } = {}) => {
+  const fetch = useCallback(async (dr: DateRange, opts: { forceRefresh?: boolean } = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await getSchedulePerformance({ range: r, forceRefresh: Boolean(opts.forceRefresh) });
+      const res = await getSchedulePerformance({
+        start: dr.start,
+        end: dr.end,
+        forceRefresh: Boolean(opts.forceRefresh),
+      });
       if (!res.ok) throw new Error(res.error);
       setReport(res.data);
     } catch (err) {
@@ -144,8 +143,8 @@ function ScheduleHeatmapCardContent() {
   }, []);
 
   useEffect(() => {
-    void fetch(range);
-  }, [fetch, range]);
+    void fetch(dateRange);
+  }, [fetch, dateRange.start, dateRange.end, dateRange]);
 
   return (
     <Card>
@@ -157,20 +156,7 @@ function ScheduleHeatmapCardContent() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={range} onValueChange={(v) => setRange(v as CampaignRangeKey)}>
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {RANGE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
 
           <Select value={metric} onValueChange={(v) => setMetric(v as MetricKey)}>
             <SelectTrigger className="w-40">
@@ -197,7 +183,7 @@ function ScheduleHeatmapCardContent() {
             type="button"
             variant="outline"
             size="icon"
-            onClick={() => void fetch(range, { forceRefresh: true })}
+            onClick={() => void fetch(dateRange, { forceRefresh: true })}
             disabled={loading}
             className="ml-auto"
             aria-label="Refresh"

@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 
 import { getDevicePerformance } from "@/app/actions/google-ads";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,14 +15,8 @@ import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } f
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { CampaignRangeKey, DevicePerformanceReport, DeviceRow } from "@/types/google-ads";
-
-const RANGE_OPTIONS: ReadonlyArray<{ value: CampaignRangeKey; label: string }> = [
-  { value: "last-7-days", label: "Last 7 days" },
-  { value: "last-4-weeks", label: "Last 4 weeks" },
-  { value: "last-3-months", label: "Last 3 months" },
-  { value: "year-to-date", label: "Year to date" },
-];
+import { last30Days } from "@/lib/date-presets";
+import type { DateRange, DevicePerformanceReport, DeviceRow } from "@/types/google-ads";
 
 type ChartMetric = "spend" | "clicks" | "conversions" | "cpa";
 
@@ -141,17 +136,21 @@ function DeviceTable({ rows }: { rows: DeviceRow[] }) {
 }
 
 function DevicePerformanceCardContent() {
-  const [range, setRange] = useState<CampaignRangeKey>("last-4-weeks");
+  const [dateRange, setDateRange] = useState<DateRange>(() => last30Days());
   const [chartMetric, setChartMetric] = useState<ChartMetric>("spend");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<DevicePerformanceReport | null>(null);
 
-  const fetch = useCallback(async (r: CampaignRangeKey, opts: { forceRefresh?: boolean } = {}) => {
+  const fetch = useCallback(async (dr: DateRange, opts: { forceRefresh?: boolean } = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await getDevicePerformance({ range: r, forceRefresh: Boolean(opts.forceRefresh) });
+      const res = await getDevicePerformance({
+        start: dr.start,
+        end: dr.end,
+        forceRefresh: Boolean(opts.forceRefresh),
+      });
       if (!res.ok) throw new Error(res.error);
       setReport(res.data);
     } catch (err) {
@@ -162,8 +161,8 @@ function DevicePerformanceCardContent() {
   }, []);
 
   useEffect(() => {
-    void fetch(range);
-  }, [fetch, range]);
+    void fetch(dateRange);
+  }, [fetch, dateRange.start, dateRange.end, dateRange]);
 
   return (
     <Card>
@@ -175,20 +174,7 @@ function DevicePerformanceCardContent() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={range} onValueChange={(v) => setRange(v as CampaignRangeKey)}>
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {RANGE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
 
           <Select value={chartMetric} onValueChange={(v) => setChartMetric(v as ChartMetric)}>
             <SelectTrigger className="w-36">
@@ -219,7 +205,7 @@ function DevicePerformanceCardContent() {
             type="button"
             variant="outline"
             size="icon"
-            onClick={() => void fetch(range, { forceRefresh: true })}
+            onClick={() => void fetch(dateRange, { forceRefresh: true })}
             disabled={loading}
             className="ml-auto"
             aria-label="Refresh"

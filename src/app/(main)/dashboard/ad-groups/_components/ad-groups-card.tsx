@@ -5,22 +5,16 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { getAdGroupReport } from "@/app/actions/google-ads";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { last30Days } from "@/lib/date-presets";
 import { cn } from "@/lib/utils";
-import type { AdGroupReport, AdGroupRow, CampaignRangeKey } from "@/types/google-ads";
-
-const RANGE_OPTIONS: ReadonlyArray<{ value: CampaignRangeKey; label: string }> = [
-  { value: "last-7-days", label: "Last 7 days" },
-  { value: "last-4-weeks", label: "Last 4 weeks" },
-  { value: "last-3-months", label: "Last 3 months" },
-  { value: "year-to-date", label: "Year to date" },
-];
+import type { AdGroupReport, AdGroupRow, DateRange } from "@/types/google-ads";
 
 const TABLE_HEAD_STICKY =
   "sticky top-0 z-10 bg-muted/90 text-foreground shadow-[0_1px_0_hsl(var(--border))] backdrop-blur-sm";
@@ -42,7 +36,7 @@ function SortableTh({
 }) {
   return (
     <TableHead
-      className={cn(TABLE_HEAD_STICKY, "cursor-pointer select-none text-right whitespace-nowrap", className)}
+      className={cn(TABLE_HEAD_STICKY, "cursor-pointer select-none whitespace-nowrap text-right", className)}
       onClick={() => onToggle(col)}
     >
       {label} {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : ""}
@@ -69,7 +63,7 @@ function IsCell({ value }: { value: number | null }) {
       : pct >= 40
         ? "text-amber-600 dark:text-amber-400"
         : "text-destructive";
-  return <TableCell className={cn("text-right tabular-nums text-xs", color)}>{pct.toFixed(0)}%</TableCell>;
+  return <TableCell className={cn("text-right text-xs tabular-nums", color)}>{pct.toFixed(0)}%</TableCell>;
 }
 
 function AdGroupsTable({ report }: { report: AdGroupReport }) {
@@ -173,11 +167,11 @@ function AdGroupsTable({ report }: { report: AdGroupReport }) {
                 <TableCell className="max-w-[180px] truncate font-medium text-xs" title={row.adGroup}>
                   {row.adGroup}
                 </TableCell>
-                <TableCell className="text-right tabular-nums text-xs">{row.spend}</TableCell>
-                <TableCell className="text-right tabular-nums text-xs">{row.clicks.toLocaleString()}</TableCell>
-                <TableCell className="text-right tabular-nums text-xs">{row.conversions.toLocaleString()}</TableCell>
-                <TableCell className="text-right tabular-nums text-xs">{row.cpa}</TableCell>
-                <TableCell className="text-right tabular-nums text-xs">{row.ctr}</TableCell>
+                <TableCell className="text-right text-xs tabular-nums">{row.spend}</TableCell>
+                <TableCell className="text-right text-xs tabular-nums">{row.clicks.toLocaleString()}</TableCell>
+                <TableCell className="text-right text-xs tabular-nums">{row.conversions.toLocaleString()}</TableCell>
+                <TableCell className="text-right text-xs tabular-nums">{row.cpa}</TableCell>
+                <TableCell className="text-right text-xs tabular-nums">{row.ctr}</TableCell>
                 <IsCell value={row.impressionShare} />
               </TableRow>
             ))}
@@ -189,16 +183,16 @@ function AdGroupsTable({ report }: { report: AdGroupReport }) {
 }
 
 function AdGroupsCardContent() {
-  const [range, setRange] = useState<CampaignRangeKey>("last-4-weeks");
+  const [dateRange, setDateRange] = useState<DateRange>(() => last30Days());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<AdGroupReport | null>(null);
 
-  const fetch = useCallback(async (r: CampaignRangeKey, opts: { forceRefresh?: boolean } = {}) => {
+  const fetch = useCallback(async (dr: DateRange, opts: { forceRefresh?: boolean } = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await getAdGroupReport({ range: r, forceRefresh: Boolean(opts.forceRefresh) });
+      const res = await getAdGroupReport({ start: dr.start, end: dr.end, forceRefresh: Boolean(opts.forceRefresh) });
       if (!res.ok) throw new Error(res.error);
       setReport(res.data);
     } catch (err) {
@@ -209,8 +203,8 @@ function AdGroupsCardContent() {
   }, []);
 
   useEffect(() => {
-    void fetch(range);
-  }, [fetch, range]);
+    void fetch(dateRange);
+  }, [fetch, dateRange.start, dateRange.end, dateRange]);
 
   return (
     <Card>
@@ -223,20 +217,7 @@ function AdGroupsCardContent() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={range} onValueChange={(v) => setRange(v as CampaignRangeKey)}>
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {RANGE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
 
           {report && !loading && (
             <span className="text-muted-foreground text-xs">
@@ -248,7 +229,7 @@ function AdGroupsCardContent() {
             type="button"
             variant="outline"
             size="icon"
-            onClick={() => void fetch(range, { forceRefresh: true })}
+            onClick={() => void fetch(dateRange, { forceRefresh: true })}
             disabled={loading}
             className="ml-auto"
             aria-label="Refresh"
