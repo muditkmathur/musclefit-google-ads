@@ -1,10 +1,14 @@
 "use server";
 
 import { runAdGroupReport } from "@/lib/google-ads/ad-group-report";
+import { runAdPerformance } from "@/lib/google-ads/ad-performance";
+import { runAuctionInsights } from "@/lib/google-ads/auction-insights";
 import { runCampaignKeywords } from "@/lib/google-ads/campaign-keywords";
 import { runChangeHistory } from "@/lib/google-ads/change-history";
 import { runDevicePerformance } from "@/lib/google-ads/device-performance";
 import { runKeywordAnalysisBundle } from "@/lib/google-ads/keyword-analysis";
+import { runKeywordSearchTermMap } from "@/lib/google-ads/keyword-search-term-map";
+import { runLandingPageReport } from "@/lib/google-ads/landing-page-report";
 import { analyzeNgrams } from "@/lib/google-ads/ngram-analysis";
 import { runQualityScore } from "@/lib/google-ads/quality-score";
 import { runCampaignReport } from "@/lib/google-ads/report";
@@ -12,13 +16,16 @@ import { runSchedulePerformance } from "@/lib/google-ads/schedule-performance";
 import { runSearchTermsReport } from "@/lib/google-ads/search-terms";
 import type {
   AdGroupReport,
+  AdPerformanceReport,
+  AuctionInsightReport,
   CampaignGranularity,
   CampaignKeywordsReport,
-  CampaignRangeKey,
   CampaignReport,
   ChangeHistoryReport,
   DevicePerformanceReport,
   KeywordAnalysisBundle,
+  KeywordSearchTermMapReport,
+  LandingPageReport,
   NgramAnalysisOptions,
   NgramAnalysisResult,
   QualityScoreReport,
@@ -27,9 +34,16 @@ import type {
   SearchTermsReport,
 } from "@/types/google-ads";
 
-const VALID_RANGES: readonly CampaignRangeKey[] = ["last-7-days", "last-4-weeks", "last-3-months", "year-to-date"];
-
 const VALID_GRANULARITIES: readonly CampaignGranularity[] = ["day", "week", "month"];
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function validateDateRange(start: string, end: string): string | null {
+  if (!ISO_DATE.test(start) || !ISO_DATE.test(end) || start > end) {
+    return "Invalid date range: provide ISO dates (YYYY-MM-DD) with start ≤ end";
+  }
+  return null;
+}
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -91,23 +105,24 @@ export async function getSearchTermsReport(
 }
 
 export interface CampaignReportActionInput {
-  range?: CampaignRangeKey;
+  start: string;
+  end: string;
   granularity?: CampaignGranularity;
   saveToDisk?: boolean;
   forceRefresh?: boolean;
 }
 
-export async function getCampaignReport(input: CampaignReportActionInput = {}): Promise<ActionResult<CampaignReport>> {
+export async function getCampaignReport(input: CampaignReportActionInput): Promise<ActionResult<CampaignReport>> {
   try {
-    const range: CampaignRangeKey = VALID_RANGES.includes(input.range as CampaignRangeKey)
-      ? (input.range as CampaignRangeKey)
-      : "last-4-weeks";
+    const rangeError = validateDateRange(input.start, input.end);
+    if (rangeError) return { ok: false, error: rangeError };
+
     const granularity: CampaignGranularity = VALID_GRANULARITIES.includes(input.granularity as CampaignGranularity)
       ? (input.granularity as CampaignGranularity)
       : "day";
 
     const data = await runCampaignReport({
-      range,
+      dateRange: { start: input.start, end: input.end },
       granularity,
       includeDaily: true,
       includeDemographics: true,
@@ -198,16 +213,19 @@ export async function getCampaignKeywords(
 }
 
 export interface QualityScoreActionInput {
-  range?: CampaignRangeKey;
+  start: string;
+  end: string;
   forceRefresh?: boolean;
 }
 
-export async function getQualityScore(input: QualityScoreActionInput = {}): Promise<ActionResult<QualityScoreReport>> {
+export async function getQualityScore(input: QualityScoreActionInput): Promise<ActionResult<QualityScoreReport>> {
   try {
-    const range: CampaignRangeKey = VALID_RANGES.includes(input.range as CampaignRangeKey)
-      ? (input.range as CampaignRangeKey)
-      : "last-4-weeks";
-    const data = await runQualityScore({ range, forceRefresh: Boolean(input.forceRefresh) });
+    const rangeError = validateDateRange(input.start, input.end);
+    if (rangeError) return { ok: false, error: rangeError };
+    const data = await runQualityScore({
+      dateRange: { start: input.start, end: input.end },
+      forceRefresh: Boolean(input.forceRefresh),
+    });
     return { ok: true, data };
   } catch (err) {
     console.error(err);
@@ -237,18 +255,21 @@ export async function getChangeHistory(
 }
 
 export interface SchedulePerformanceActionInput {
-  range?: CampaignRangeKey;
+  start: string;
+  end: string;
   forceRefresh?: boolean;
 }
 
 export async function getSchedulePerformance(
-  input: SchedulePerformanceActionInput = {},
+  input: SchedulePerformanceActionInput,
 ): Promise<ActionResult<SchedulePerformanceReport>> {
   try {
-    const range: CampaignRangeKey = VALID_RANGES.includes(input.range as CampaignRangeKey)
-      ? (input.range as CampaignRangeKey)
-      : "last-4-weeks";
-    const data = await runSchedulePerformance({ range, forceRefresh: Boolean(input.forceRefresh) });
+    const rangeError = validateDateRange(input.start, input.end);
+    if (rangeError) return { ok: false, error: rangeError };
+    const data = await runSchedulePerformance({
+      dateRange: { start: input.start, end: input.end },
+      forceRefresh: Boolean(input.forceRefresh),
+    });
     return { ok: true, data };
   } catch (err) {
     console.error(err);
@@ -257,16 +278,19 @@ export async function getSchedulePerformance(
 }
 
 export interface AdGroupReportActionInput {
-  range?: CampaignRangeKey;
+  start: string;
+  end: string;
   forceRefresh?: boolean;
 }
 
-export async function getAdGroupReport(input: AdGroupReportActionInput = {}): Promise<ActionResult<AdGroupReport>> {
+export async function getAdGroupReport(input: AdGroupReportActionInput): Promise<ActionResult<AdGroupReport>> {
   try {
-    const range: CampaignRangeKey = VALID_RANGES.includes(input.range as CampaignRangeKey)
-      ? (input.range as CampaignRangeKey)
-      : "last-4-weeks";
-    const data = await runAdGroupReport({ range, forceRefresh: Boolean(input.forceRefresh) });
+    const rangeError = validateDateRange(input.start, input.end);
+    if (rangeError) return { ok: false, error: rangeError };
+    const data = await runAdGroupReport({
+      dateRange: { start: input.start, end: input.end },
+      forceRefresh: Boolean(input.forceRefresh),
+    });
     return { ok: true, data };
   } catch (err) {
     console.error(err);
@@ -275,18 +299,127 @@ export async function getAdGroupReport(input: AdGroupReportActionInput = {}): Pr
 }
 
 export interface DevicePerformanceActionInput {
-  range?: CampaignRangeKey;
+  start: string;
+  end: string;
   forceRefresh?: boolean;
 }
 
 export async function getDevicePerformance(
-  input: DevicePerformanceActionInput = {},
+  input: DevicePerformanceActionInput,
 ): Promise<ActionResult<DevicePerformanceReport>> {
   try {
-    const range: CampaignRangeKey = VALID_RANGES.includes(input.range as CampaignRangeKey)
-      ? (input.range as CampaignRangeKey)
-      : "last-4-weeks";
-    const data = await runDevicePerformance({ range, forceRefresh: Boolean(input.forceRefresh) });
+    const rangeError = validateDateRange(input.start, input.end);
+    if (rangeError) return { ok: false, error: rangeError };
+    const data = await runDevicePerformance({
+      dateRange: { start: input.start, end: input.end },
+      forceRefresh: Boolean(input.forceRefresh),
+    });
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface LandingPageReportActionInput {
+  start: string;
+  end: string;
+  campaign?: string | null;
+  forceRefresh?: boolean;
+}
+
+export async function getLandingPageReport(
+  input: LandingPageReportActionInput,
+): Promise<ActionResult<LandingPageReport>> {
+  try {
+    const rangeError = validateDateRange(input.start, input.end);
+    if (rangeError) return { ok: false, error: rangeError };
+    const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
+    const data = await runLandingPageReport({
+      dateRange: { start: input.start, end: input.end },
+      campaign,
+      forceRefresh: Boolean(input.forceRefresh),
+    });
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface KeywordSearchTermMapActionInput {
+  start: string;
+  end: string;
+  campaign?: string | null;
+  top?: number;
+  forceRefresh?: boolean;
+}
+
+export async function getKeywordSearchTermMap(
+  input: KeywordSearchTermMapActionInput,
+): Promise<ActionResult<KeywordSearchTermMapReport>> {
+  try {
+    const rangeError = validateDateRange(input.start, input.end);
+    if (rangeError) return { ok: false, error: rangeError };
+    const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
+    const topNum = Number(input.top);
+    const top = Number.isFinite(topNum) && topNum > 0 ? Math.min(Math.floor(topNum), 1000) : 300;
+    const data = await runKeywordSearchTermMap({
+      dateRange: { start: input.start, end: input.end },
+      campaign,
+      top,
+      forceRefresh: Boolean(input.forceRefresh),
+    });
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface AdPerformanceActionInput {
+  start: string;
+  end: string;
+  campaign?: string | null;
+  forceRefresh?: boolean;
+}
+
+export async function getAdPerformance(input: AdPerformanceActionInput): Promise<ActionResult<AdPerformanceReport>> {
+  try {
+    const rangeError = validateDateRange(input.start, input.end);
+    if (rangeError) return { ok: false, error: rangeError };
+    const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
+    const data = await runAdPerformance({
+      dateRange: { start: input.start, end: input.end },
+      campaign,
+      forceRefresh: Boolean(input.forceRefresh),
+    });
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface AuctionInsightsActionInput {
+  start: string;
+  end: string;
+  campaign?: string | null;
+  forceRefresh?: boolean;
+}
+
+export async function getAuctionInsights(
+  input: AuctionInsightsActionInput,
+): Promise<ActionResult<AuctionInsightReport>> {
+  try {
+    const rangeError = validateDateRange(input.start, input.end);
+    if (rangeError) return { ok: false, error: rangeError };
+    const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
+    const data = await runAuctionInsights({
+      dateRange: { start: input.start, end: input.end },
+      campaign,
+      forceRefresh: Boolean(input.forceRefresh),
+    });
     return { ok: true, data };
   } catch (err) {
     console.error(err);
