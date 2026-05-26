@@ -103,7 +103,7 @@ function AuctionInsightsCardContent() {
   }, []);
 
   useEffect(() => {
-    void fetch(dateRange);
+    void fetch({ start: dateRange.start, end: dateRange.end });
   }, [fetch, dateRange.start, dateRange.end]);
 
   const byCampaign = useMemo(() => (report ? competitorsByCampaign(report.competitors) : new Map()), [report]);
@@ -131,7 +131,7 @@ function AuctionInsightsCardContent() {
             type="button"
             variant="outline"
             size="icon"
-            onClick={() => void fetch(dateRange, { forceRefresh: true })}
+            onClick={() => void fetch({ start: dateRange.start, end: dateRange.end }, { forceRefresh: true })}
             disabled={loading}
             className="ml-auto"
             aria-label="Refresh"

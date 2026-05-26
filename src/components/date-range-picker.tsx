@@ -193,7 +193,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
                     }
                   }}
                 />
-                <span className="text-xs text-muted-foreground">days to today</span>
+                <span className="text-muted-foreground text-xs">days to today</span>
               </div>
               <div className="flex items-center gap-1">
                 <Input
@@ -211,7 +211,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
                     }
                   }}
                 />
-                <span className="text-xs text-muted-foreground">days to yesterday</span>
+                <span className="text-muted-foreground text-xs">days to yesterday</span>
               </div>
             </div>
           </div>
@@ -220,8 +220,9 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
           <div className="p-3">
             <div className="mb-2 flex gap-2">
               <div className="flex flex-col gap-0.5">
-                <label className="text-xs text-muted-foreground">Start date</label>
+                <label htmlFor="drp-start" className="text-muted-foreground text-xs">Start date</label>
                 <Input
+                  id="drp-start"
                   className="h-7 w-28 text-xs"
                   placeholder="DD/MM/YYYY"
                   value={startInput}
@@ -229,8 +230,9 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
                 />
               </div>
               <div className="flex flex-col gap-0.5">
-                <label className="text-xs text-muted-foreground">End date</label>
+                <label htmlFor="drp-end" className="text-muted-foreground text-xs">End date</label>
                 <Input
+                  id="drp-end"
                   className="h-7 w-28 text-xs"
                   placeholder="DD/MM/YYYY"
                   value={endInput}

@@ -258,7 +258,7 @@ function CampaignReportCardContent() {
   );
 
   useEffect(() => {
-    void fetchReport(dateRange, granularity);
+    void fetchReport({ start: dateRange.start, end: dateRange.end }, granularity);
   }, [fetchReport, dateRange.start, dateRange.end, granularity]);
 
   useEffect(() => {
@@ -276,7 +276,7 @@ function CampaignReportCardContent() {
           title: "Google Ads connected",
           description: "Your refresh token was saved. The report below will load with your authorized account.",
         });
-        void fetchReport(dateRange, granularity);
+        void fetchReport({ start: dateRange.start, end: dateRange.end }, granularity);
         break;
       case "denied":
         setOauthNotice({
@@ -355,7 +355,9 @@ function CampaignReportCardContent() {
             type="button"
             variant="outline"
             size="icon"
-            onClick={() => void fetchReport(dateRange, granularity, { forceRefresh: true })}
+            onClick={() =>
+              void fetchReport({ start: dateRange.start, end: dateRange.end }, granularity, { forceRefresh: true })
+            }
             disabled={loading}
             className="sm:ml-auto"
             aria-label="Refresh report"
