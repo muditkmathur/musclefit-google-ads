@@ -23,8 +23,8 @@ export interface CampaignSummaryRow {
   impressionShare: number | null;
   lostIsBudget: number | null;
   lostIsRank: number | null;
-  dailyBudget: number;    // INR (micros / 1_000_000)
-  periodBudget: number;   // dailyBudget × days in the selected date range
+  dailyBudget: number; // INR (micros / 1_000_000)
+  periodBudget: number; // dailyBudget × days in the selected date range
 }
 
 export interface CampaignTotals {
@@ -55,7 +55,6 @@ export type CampaignGranularity = "day" | "week" | "month";
 export interface CampaignReport {
   generated_at: string;
   period: string;
-  range: CampaignRangeKey;
   granularity: CampaignGranularity;
   date_range: DateRange;
   previous_date_range: DateRange;
