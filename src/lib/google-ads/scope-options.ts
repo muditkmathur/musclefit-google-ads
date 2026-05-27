@@ -47,7 +47,7 @@ async function fetchScopeOptions(): Promise<ScopeOptions> {
 
     const adGroupName = String(r.ad_group?.name ?? "");
     if (adGroupName) {
-      campaignMap.get(campaignName)?.adGroups.push({
+      campaignMap.get(campaignName)!.adGroups.push({
         name: adGroupName,
         status: String(r.ad_group?.status ?? ""),
       });
