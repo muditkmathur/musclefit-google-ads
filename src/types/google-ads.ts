@@ -529,3 +529,19 @@ export interface AuctionInsightReport {
   /** Set when the API denies auction-insight metrics for this developer token. */
   warning?: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Scope options (campaign / ad group picker)
+// ---------------------------------------------------------------------------
+
+export interface ScopeCampaign {
+  name: string;
+  status: string;
+  type: string;
+  adGroups: Array<{ name: string; status: string }>;
+}
+
+export interface ScopeOptions {
+  generatedAt: string;
+  campaigns: ScopeCampaign[];
+}
