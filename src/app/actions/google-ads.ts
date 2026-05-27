@@ -13,6 +13,7 @@ import { analyzeNgrams } from "@/lib/google-ads/ngram-analysis";
 import { runQualityScore } from "@/lib/google-ads/quality-score";
 import { runCampaignReport } from "@/lib/google-ads/report";
 import { runSchedulePerformance } from "@/lib/google-ads/schedule-performance";
+import { runScopeOptions } from "@/lib/google-ads/scope-options";
 import { runSearchTermsReport } from "@/lib/google-ads/search-terms";
 import type {
   AdGroupReport,
@@ -30,6 +31,7 @@ import type {
   NgramAnalysisResult,
   QualityScoreReport,
   SchedulePerformanceReport,
+  ScopeOptions,
   SearchTermRow,
   SearchTermsReport,
 } from "@/types/google-ads";
@@ -449,6 +451,16 @@ export async function getKeywordAnalysisBundle(
       forceRefresh: Boolean(input.forceRefresh),
     });
 
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export async function getScopeOptions(input: { forceRefresh?: boolean } = {}): Promise<ActionResult<ScopeOptions>> {
+  try {
+    const data = await runScopeOptions({ forceRefresh: Boolean(input.forceRefresh) });
     return { ok: true, data };
   } catch (err) {
     console.error(err);
