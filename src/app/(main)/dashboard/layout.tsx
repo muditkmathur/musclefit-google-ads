@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 
 import { cookies } from "next/headers";
 
 import { AppSidebar } from "@/app/(main)/dashboard/_components/sidebar/app-sidebar";
+import { ScopePicker } from "@/components/scope-picker";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { SIDEBAR_COLLAPSIBLE_VALUES, SIDEBAR_VARIANT_VALUES } from "@/lib/preferences/layout";
@@ -55,6 +57,9 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
               <SearchDialog />
             </div>
             <div className="flex items-center gap-2">
+              <Suspense fallback={null}>
+                <ScopePicker />
+              </Suspense>
               <LayoutControls />
               <ThemeSwitcher />
             </div>
