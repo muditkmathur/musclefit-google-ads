@@ -75,6 +75,7 @@ function escapeForGaql(value: string): string {
 export interface RunKeywordSearchTermMapOptions {
   dateRange: DateRange;
   campaign?: string | null;
+  adGroup?: string | null;
   top?: number;
   forceRefresh?: boolean;
 }
@@ -83,6 +84,7 @@ export async function runKeywordSearchTermMap(
   options: RunKeywordSearchTermMapOptions,
 ): Promise<KeywordSearchTermMapReport> {
   const campaignFilter = options.campaign?.trim() || null;
+  const adGroupFilter = options.adGroup?.trim() || null;
   const top = options.top && options.top > 0 ? Math.min(Math.floor(options.top), 1000) : DEFAULT_TOP;
 
   const cacheKey = buildCacheKey("keyword-search-term-map:v1", {
@@ -90,12 +92,13 @@ export async function runKeywordSearchTermMap(
     rangeStart: options.dateRange.start,
     rangeEnd: options.dateRange.end,
     campaignFilter,
+    adGroupFilter,
     top,
   });
 
   return getOrSetJson<KeywordSearchTermMapReport>(
     cacheKey,
-    () => fetchKeywordSearchTermMap(options.dateRange, campaignFilter, top),
+    () => fetchKeywordSearchTermMap(options.dateRange, campaignFilter, adGroupFilter, top),
     CACHE_TTL_SECONDS,
     { forceRefresh: options.forceRefresh === true },
   );
@@ -104,11 +107,13 @@ export async function runKeywordSearchTermMap(
 async function fetchKeywordSearchTermMap(
   dateRange: DateRange,
   campaignFilter: string | null,
+  adGroupFilter: string | null,
   top: number,
 ): Promise<KeywordSearchTermMapReport> {
   const customer = await getCustomer();
 
   const campaignClause = campaignFilter ? ` AND campaign.name LIKE '%${escapeForGaql(campaignFilter)}%'` : "";
+  const adGroupClause = adGroupFilter ? ` AND ad_group.name = '${escapeForGaql(adGroupFilter)}'` : "";
 
   const response = await customer.query(`
     SELECT
@@ -125,7 +130,7 @@ async function fetchKeywordSearchTermMap(
       metrics.conversions
     FROM search_term_view
     WHERE segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-      AND campaign.status = 'ENABLED'${campaignClause}
+      AND campaign.status = 'ENABLED'${campaignClause}${adGroupClause}
     ORDER BY metrics.cost_micros DESC
   `);
 

@@ -371,6 +371,7 @@ export interface KeywordSearchTermMapActionInput {
   start: string;
   end: string;
   campaign?: string | null;
+  adGroup?: string | null;
   top?: number;
   forceRefresh?: boolean;
 }
@@ -382,11 +383,13 @@ export async function getKeywordSearchTermMap(
     const rangeError = validateDateRange(input.start, input.end);
     if (rangeError) return { ok: false, error: rangeError };
     const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
+    const adGroup = input.adGroup?.trim() ? input.adGroup.trim() : null;
     const topNum = Number(input.top);
     const top = Number.isFinite(topNum) && topNum > 0 ? Math.min(Math.floor(topNum), 1000) : 300;
     const data = await runKeywordSearchTermMap({
       dateRange: { start: input.start, end: input.end },
       campaign,
+      adGroup,
       top,
       forceRefresh: Boolean(input.forceRefresh),
     });
@@ -401,6 +404,7 @@ export interface AdPerformanceActionInput {
   start: string;
   end: string;
   campaign?: string | null;
+  adGroup?: string | null;
   forceRefresh?: boolean;
 }
 
@@ -409,9 +413,11 @@ export async function getAdPerformance(input: AdPerformanceActionInput): Promise
     const rangeError = validateDateRange(input.start, input.end);
     if (rangeError) return { ok: false, error: rangeError };
     const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
+    const adGroup = input.adGroup?.trim() ? input.adGroup.trim() : null;
     const data = await runAdPerformance({
       dateRange: { start: input.start, end: input.end },
       campaign,
+      adGroup,
       forceRefresh: Boolean(input.forceRefresh),
     });
     return { ok: true, data };

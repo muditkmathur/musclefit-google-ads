@@ -82,22 +82,25 @@ const STATUS_LABELS: Record<string, string> = {
 export interface RunAdPerformanceOptions {
   dateRange: DateRange;
   campaign?: string | null;
+  adGroup?: string | null;
   forceRefresh?: boolean;
 }
 
 export async function runAdPerformance(options: RunAdPerformanceOptions): Promise<AdPerformanceReport> {
   const campaignFilter = options.campaign?.trim() || null;
+  const adGroupFilter = options.adGroup?.trim() || null;
 
   const cacheKey = buildCacheKey("ad-performance:v1", {
     customerId: getCustomerId(),
     rangeStart: options.dateRange.start,
     rangeEnd: options.dateRange.end,
     campaignFilter,
+    adGroupFilter,
   });
 
   return getOrSetJson<AdPerformanceReport>(
     cacheKey,
-    () => fetchAdPerformance(options.dateRange, campaignFilter),
+    () => fetchAdPerformance(options.dateRange, campaignFilter, adGroupFilter),
     CACHE_TTL_SECONDS,
     { forceRefresh: options.forceRefresh === true },
   );
@@ -107,10 +110,15 @@ function escapeForGaql(value: string): string {
   return value.replaceAll("'", "\\'");
 }
 
-async function fetchAdPerformance(dateRange: DateRange, campaignFilter: string | null): Promise<AdPerformanceReport> {
+async function fetchAdPerformance(
+  dateRange: DateRange,
+  campaignFilter: string | null,
+  adGroupFilter: string | null,
+): Promise<AdPerformanceReport> {
   const customer = await getCustomer();
 
   const campaignClause = campaignFilter ? ` AND campaign.name LIKE '%${escapeForGaql(campaignFilter)}%'` : "";
+  const adGroupClause = adGroupFilter ? ` AND ad_group.name = '${escapeForGaql(adGroupFilter)}'` : "";
 
   const adRows = await customer.query(`
     SELECT
@@ -132,7 +140,7 @@ async function fetchAdPerformance(dateRange: DateRange, campaignFilter: string |
     WHERE segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}'
       AND campaign.status = 'ENABLED'
       AND ad_group.status = 'ENABLED'
-      AND ad_group_ad.status != 'REMOVED'${campaignClause}
+      AND ad_group_ad.status != 'REMOVED'${campaignClause}${adGroupClause}
     ORDER BY metrics.cost_micros DESC
   `);
 
@@ -187,7 +195,7 @@ async function fetchAdPerformance(dateRange: DateRange, campaignFilter: string |
     FROM ad_group_ad_asset_view
     WHERE segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}'
       AND campaign.status = 'ENABLED'
-      AND ad_group.status = 'ENABLED'${campaignClause}
+      AND ad_group.status = 'ENABLED'${campaignClause}${adGroupClause}
   `);
 
   // Aggregate by (campaign, adGroup, fieldType, text). Attach assets to every ad
