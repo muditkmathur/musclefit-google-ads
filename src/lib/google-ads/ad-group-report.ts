@@ -12,22 +12,39 @@ function parseIsFraction(raw: unknown): number | null {
 
 export interface RunAdGroupReportOptions {
   dateRange: DateRange;
+  campaign?: string | null;
   forceRefresh?: boolean;
 }
 
 export async function runAdGroupReport(options: RunAdGroupReportOptions): Promise<AdGroupReport> {
+  const campaignFilter = options.campaign?.trim() || null;
+
   const cacheKey = buildCacheKey("ad-groups:v1", {
     customerId: getCustomerId(),
     rangeStart: options.dateRange.start,
     rangeEnd: options.dateRange.end,
+    campaignFilter,
   });
-  return getOrSetJson<AdGroupReport>(cacheKey, () => fetchAdGroupReport(options.dateRange), CACHE_TTL_SECONDS, {
-    forceRefresh: options.forceRefresh === true,
-  });
+  return getOrSetJson<AdGroupReport>(
+    cacheKey,
+    () => fetchAdGroupReport(options.dateRange, campaignFilter),
+    CACHE_TTL_SECONDS,
+    {
+      forceRefresh: options.forceRefresh === true,
+    },
+  );
 }
 
-async function fetchAdGroupReport(dateRange: { start: string; end: string }): Promise<AdGroupReport> {
+function escapeForGaql(value: string): string {
+  return value.replaceAll("'", "\\'");
+}
+
+async function fetchAdGroupReport(
+  dateRange: { start: string; end: string },
+  campaignFilter: string | null,
+): Promise<AdGroupReport> {
   const customer = await getCustomer();
+  const campaignClause = campaignFilter ? ` AND campaign.name = '${escapeForGaql(campaignFilter)}'` : "";
   const rows = await customer.query(`
     SELECT
       campaign.name,
@@ -43,7 +60,7 @@ async function fetchAdGroupReport(dateRange: { start: string; end: string }): Pr
     FROM ad_group
     WHERE segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}'
       AND campaign.status = 'ENABLED'
-      AND ad_group.status = 'ENABLED'
+      AND ad_group.status = 'ENABLED'${campaignClause}
     ORDER BY metrics.cost_micros DESC
   `);
 

@@ -57,23 +57,40 @@ function classifyBottleneck(
 
 export interface RunQualityScoreOptions {
   dateRange: DateRange;
+  campaign?: string | null;
   forceRefresh?: boolean;
 }
 
 export async function runQualityScore(options: RunQualityScoreOptions): Promise<QualityScoreReport> {
+  const campaignFilter = options.campaign?.trim() || null;
+
   const cacheKey = buildCacheKey("quality-score:v4", {
     customerId: getCustomerId(),
     rangeStart: options.dateRange.start,
     rangeEnd: options.dateRange.end,
+    campaignFilter,
   });
 
-  return getOrSetJson<QualityScoreReport>(cacheKey, () => fetchQualityScore(options.dateRange), CACHE_TTL_SECONDS, {
-    forceRefresh: options.forceRefresh === true,
-  });
+  return getOrSetJson<QualityScoreReport>(
+    cacheKey,
+    () => fetchQualityScore(options.dateRange, campaignFilter),
+    CACHE_TTL_SECONDS,
+    {
+      forceRefresh: options.forceRefresh === true,
+    },
+  );
 }
 
-async function fetchQualityScore(dateRange: { start: string; end: string }): Promise<QualityScoreReport> {
+function escapeForGaql(value: string): string {
+  return value.replaceAll("'", "\\'");
+}
+
+async function fetchQualityScore(
+  dateRange: { start: string; end: string },
+  campaignFilter: string | null,
+): Promise<QualityScoreReport> {
   const customer = await getCustomer();
+  const campaignClause = campaignFilter ? ` AND campaign.name = '${escapeForGaql(campaignFilter)}'` : "";
 
   const rows = await customer.query(`
     SELECT
@@ -98,7 +115,7 @@ async function fetchQualityScore(dateRange: { start: string; end: string }): Pro
     WHERE ad_group_criterion.status != 'REMOVED'
       AND campaign.status = 'ENABLED'
       AND ad_group.status = 'ENABLED'
-      AND segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+      AND segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}'${campaignClause}
     ORDER BY metrics.cost_micros DESC
   `);
 

@@ -62,6 +62,7 @@ function diff(prev: number, curr: number): DiffValue {
 
 export interface RunCampaignReportOptions {
   dateRange: DateRange;
+  campaign?: string | null;
   granularity?: CampaignGranularity;
   includeDaily?: boolean;
   includeDemographics?: boolean;
@@ -90,31 +91,42 @@ function parseIsFraction(raw: unknown): number | null {
   return Number.isFinite(n) && n >= 0 && n <= 1 ? n : null;
 }
 
+function escapeForGaql(value: string): string {
+  return value.replaceAll("'", "\\'");
+}
+
 async function queryCampaignSummary(
   rangeStart: string,
   rangeEnd: string,
-  options: { forceRefresh?: boolean } = {},
+  options: { forceRefresh?: boolean; campaignFilter?: string | null } = {},
 ): Promise<CampaignQueryResult> {
+  const campaignFilter = options.campaignFilter ?? null;
   const cacheKey = buildCacheKey("report:summary:v3", {
     customerId: getCustomerId(),
     rangeStart,
     rangeEnd,
+    campaignFilter,
   });
   return getOrSetJson<CampaignQueryResult>(
     cacheKey,
     async () => {
-      return queryCampaignSummaryUncached(rangeStart, rangeEnd);
+      return queryCampaignSummaryUncached(rangeStart, rangeEnd, campaignFilter);
     },
     undefined,
     { forceRefresh: options.forceRefresh === true },
   );
 }
 
-async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string): Promise<CampaignQueryResult> {
+async function queryCampaignSummaryUncached(
+  rangeStart: string,
+  rangeEnd: string,
+  campaignFilter: string | null,
+): Promise<CampaignQueryResult> {
   const rangeStartDate = new Date(`${rangeStart}T00:00:00`);
   const rangeEndDate = new Date(`${rangeEnd}T00:00:00`);
   const rangeDays = daysBetween(rangeStartDate, rangeEndDate);
   const gaqlDateFilter = `segments.date BETWEEN '${rangeStart}' AND '${rangeEnd}'`;
+  const campaignClause = campaignFilter ? ` AND campaign.name = '${escapeForGaql(campaignFilter)}'` : "";
   const customer = await getCustomer();
   const rows = await customer.query(`
     SELECT
@@ -134,7 +146,7 @@ async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string
       campaign_budget.type
     FROM campaign
     WHERE ${gaqlDateFilter}
-      AND campaign.status = 'ENABLED'
+      AND campaign.status = 'ENABLED'${campaignClause}
     ORDER BY metrics.cost_micros DESC
   `);
 
@@ -213,6 +225,7 @@ async function queryCampaignSummaryUncached(rangeStart: string, rangeEnd: string
 
 export async function runCampaignReport(options: RunCampaignReportOptions): Promise<RunCampaignReportResult> {
   const { dateRange } = options;
+  const campaignFilter = options.campaign?.trim() || null;
   const granularity: CampaignGranularity = options.granularity ?? "day";
   const includeDaily = options.includeDaily ?? true;
   const includeDemographics = options.includeDemographics ?? false;
@@ -223,12 +236,15 @@ export async function runCampaignReport(options: RunCampaignReportOptions): Prom
   const period = `${rangeStart} to ${rangeEnd}`;
   const forceRefresh = options.forceRefresh === true;
 
-  const current = await queryCampaignSummary(rangeStart, rangeEnd, { forceRefresh });
+  const current = await queryCampaignSummary(rangeStart, rangeEnd, { forceRefresh, campaignFilter });
 
   const previousDateRange = previousRange(dateRange);
   let previous: CampaignQueryResult | null = null;
   if (includePrevious) {
-    previous = await queryCampaignSummary(previousDateRange.start, previousDateRange.end, { forceRefresh });
+    previous = await queryCampaignSummary(previousDateRange.start, previousDateRange.end, {
+      forceRefresh,
+      campaignFilter,
+    });
   }
 
   const generatedAt = new Date().toISOString();
@@ -273,6 +289,7 @@ export async function runCampaignReport(options: RunCampaignReportOptions): Prom
       rangeEnd,
       periodLabel: period,
       forceRefresh,
+      campaignFilter,
     });
     result.daily = daily;
   }
@@ -285,6 +302,7 @@ export async function runCampaignReport(options: RunCampaignReportOptions): Prom
         rangeEnd,
         periodLabel: period,
         forceRefresh,
+        campaignFilter,
       });
       result.demographics = demographics;
     } catch (err) {
@@ -324,15 +342,17 @@ interface DailyContext {
   rangeEnd: string;
   periodLabel: string;
   forceRefresh?: boolean;
+  campaignFilter?: string | null;
 }
 
 async function getCampaignDailyReport(ctx: DailyContext): Promise<CampaignDailyReport> {
-  const { rangeStart, rangeEnd, periodLabel, forceRefresh } = ctx;
+  const { rangeStart, rangeEnd, periodLabel, forceRefresh, campaignFilter } = ctx;
   const cacheKey = buildCacheKey("report:daily:v2", {
     customerId: getCustomerId(),
     rangeStart,
     rangeEnd,
     periodLabel,
+    campaignFilter: campaignFilter ?? null,
   });
   return getOrSetJson<CampaignDailyReport>(cacheKey, () => getCampaignDailyReportUncached(ctx), undefined, {
     forceRefresh: forceRefresh === true,
@@ -340,8 +360,9 @@ async function getCampaignDailyReport(ctx: DailyContext): Promise<CampaignDailyR
 }
 
 async function getCampaignDailyReportUncached(ctx: DailyContext): Promise<CampaignDailyReport> {
-  const { rangeStart, rangeEnd, periodLabel } = ctx;
+  const { rangeStart, rangeEnd, periodLabel, campaignFilter } = ctx;
   const gaqlDateFilter = `segments.date BETWEEN '${rangeStart}' AND '${rangeEnd}'`;
+  const campaignClause = campaignFilter ? ` AND campaign.name = '${escapeForGaql(campaignFilter)}'` : "";
 
   const customer = await getCustomer();
   const rows = await customer.query(`
@@ -360,7 +381,7 @@ async function getCampaignDailyReportUncached(ctx: DailyContext): Promise<Campai
       metrics.search_rank_lost_impression_share
     FROM campaign
     WHERE ${gaqlDateFilter}
-      AND campaign.status = 'ENABLED'
+      AND campaign.status = 'ENABLED'${campaignClause}
     ORDER BY campaign.name, segments.date
   `);
 
@@ -601,12 +622,13 @@ function sortBuckets(dimension: DemographicDimension, buckets: Array<{ key: stri
 }
 
 async function getCampaignDemographicsReport(ctx: DailyContext): Promise<CampaignDemographicsReport> {
-  const { rangeStart, rangeEnd, periodLabel, forceRefresh } = ctx;
+  const { rangeStart, rangeEnd, periodLabel, forceRefresh, campaignFilter } = ctx;
   const cacheKey = buildCacheKey("report:demographics", {
     customerId: getCustomerId(),
     rangeStart,
     rangeEnd,
     periodLabel,
+    campaignFilter: campaignFilter ?? null,
   });
   return getOrSetJson<CampaignDemographicsReport>(
     cacheKey,
@@ -635,8 +657,10 @@ async function queryDemographicView(
   rangeStart: string,
   rangeEnd: string,
   bucketField: "ad_group_criterion.age_range.type" | "ad_group_criterion.gender.type",
+  campaignFilter: string | null,
 ): Promise<RawDemographicRow[]> {
   const customer = await getCustomer();
+  const campaignClause = campaignFilter ? ` AND campaign.name = '${escapeForGaql(campaignFilter)}'` : "";
   const rows = await customer.query(`
     SELECT
       segments.date,
@@ -651,7 +675,7 @@ async function queryDemographicView(
       metrics.average_cpc
     FROM ${resource}
     WHERE segments.date BETWEEN '${rangeStart}' AND '${rangeEnd}'
-      AND campaign.status = 'ENABLED'
+      AND campaign.status = 'ENABLED'${campaignClause}
     ORDER BY campaign.name, segments.date
   `);
 
@@ -710,11 +734,12 @@ function buildSliceFromRows(dimension: DemographicDimension, rows: RawDemographi
 }
 
 async function getCampaignDemographicsReportUncached(ctx: DailyContext): Promise<CampaignDemographicsReport> {
-  const { rangeStart, rangeEnd, periodLabel } = ctx;
+  const { rangeStart, rangeEnd, periodLabel, campaignFilter } = ctx;
+  const filter = campaignFilter ?? null;
 
   const [ageRows, genderRows] = await Promise.all([
-    queryDemographicView("age_range_view", rangeStart, rangeEnd, "ad_group_criterion.age_range.type"),
-    queryDemographicView("gender_view", rangeStart, rangeEnd, "ad_group_criterion.gender.type"),
+    queryDemographicView("age_range_view", rangeStart, rangeEnd, "ad_group_criterion.age_range.type", filter),
+    queryDemographicView("gender_view", rangeStart, rangeEnd, "ad_group_criterion.gender.type", filter),
   ]);
 
   const byCampaign = new Map<string, { age: RawDemographicRow[]; gender: RawDemographicRow[] }>();

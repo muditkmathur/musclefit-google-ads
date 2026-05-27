@@ -206,6 +206,7 @@ function buildSummary(event: {
 
 export interface RunChangeHistoryOptions {
   days?: number;
+  campaign?: string | null;
   forceRefresh?: boolean;
 }
 
@@ -221,6 +222,7 @@ function fmtDateTime(d: Date): string {
 }
 
 export async function runChangeHistory(options: RunChangeHistoryOptions = {}): Promise<ChangeHistoryReport> {
+  const campaignFilter = options.campaign?.trim() || null;
   const days = Math.min(Math.max(1, Math.floor(options.days ?? 30)), MAX_DAYS);
   const end = new Date();
   // Subtract exact milliseconds so "30 days" never exceeds the API's 30-day retention window.
@@ -237,7 +239,7 @@ export async function runChangeHistory(options: RunChangeHistoryOptions = {}): P
 
   return getOrSetJson<ChangeHistoryReport>(
     cacheKey,
-    () => fetchChangeHistory(dateRange, fmtDateTime(start), fmtDateTime(end)),
+    () => fetchChangeHistory(dateRange, fmtDateTime(start), fmtDateTime(end), campaignFilter),
     CHANGE_HISTORY_TTL_SECONDS,
     { forceRefresh: options.forceRefresh === true },
   );
@@ -247,6 +249,7 @@ async function fetchChangeHistory(
   dateRange: DateRange,
   queryStart: string,
   queryEnd: string,
+  campaignFilter: string | null,
 ): Promise<ChangeHistoryReport> {
   const customer = await getCustomer();
 
@@ -341,9 +344,11 @@ async function fetchChangeHistory(
     };
   });
 
+  const filteredEvents = campaignFilter ? events.filter((e) => e.campaignName === campaignFilter) : events;
+
   return {
     generatedAt: new Date().toISOString(),
     dateRange,
-    events,
+    events: filteredEvents,
   };
 }

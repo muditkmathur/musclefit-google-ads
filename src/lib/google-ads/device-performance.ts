@@ -19,18 +19,22 @@ const DEVICE_LABELS: Record<string, string> = {
 
 export interface RunDevicePerformanceOptions {
   dateRange: DateRange;
+  campaign?: string | null;
   forceRefresh?: boolean;
 }
 
 export async function runDevicePerformance(options: RunDevicePerformanceOptions): Promise<DevicePerformanceReport> {
+  const campaignFilter = options.campaign?.trim() || null;
+
   const cacheKey = buildCacheKey("device:v1", {
     customerId: getCustomerId(),
     rangeStart: options.dateRange.start,
     rangeEnd: options.dateRange.end,
+    campaignFilter,
   });
   return getOrSetJson<DevicePerformanceReport>(
     cacheKey,
-    () => fetchDevicePerformance(options.dateRange),
+    () => fetchDevicePerformance(options.dateRange, campaignFilter),
     CACHE_TTL_SECONDS,
     {
       forceRefresh: options.forceRefresh === true,
@@ -38,8 +42,16 @@ export async function runDevicePerformance(options: RunDevicePerformanceOptions)
   );
 }
 
-async function fetchDevicePerformance(dateRange: { start: string; end: string }): Promise<DevicePerformanceReport> {
+function escapeForGaql(value: string): string {
+  return value.replaceAll("'", "\\'");
+}
+
+async function fetchDevicePerformance(
+  dateRange: { start: string; end: string },
+  campaignFilter: string | null,
+): Promise<DevicePerformanceReport> {
   const customer = await getCustomer();
+  const campaignClause = campaignFilter ? ` AND campaign.name = '${escapeForGaql(campaignFilter)}'` : "";
   const rows = await customer.query(`
     SELECT
       segments.device,
@@ -52,7 +64,7 @@ async function fetchDevicePerformance(dateRange: { start: string; end: string })
       metrics.average_cpc
     FROM campaign
     WHERE segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-      AND campaign.status = 'ENABLED'
+      AND campaign.status = 'ENABLED'${campaignClause}
   `);
 
   // Aggregate by device across all campaigns

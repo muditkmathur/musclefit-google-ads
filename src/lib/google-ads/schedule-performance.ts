@@ -23,27 +23,39 @@ const DAY_OF_WEEK_MAP: Record<string, DayOfWeek> = {
 
 export interface RunSchedulePerformanceOptions {
   dateRange: DateRange;
+  campaign?: string | null;
   forceRefresh?: boolean;
 }
 
 export async function runSchedulePerformance(
   options: RunSchedulePerformanceOptions,
 ): Promise<SchedulePerformanceReport> {
+  const campaignFilter = options.campaign?.trim() || null;
+
   const cacheKey = buildCacheKey("schedule:v1", {
     customerId: getCustomerId(),
     rangeStart: options.dateRange.start,
     rangeEnd: options.dateRange.end,
+    campaignFilter,
   });
   return getOrSetJson<SchedulePerformanceReport>(
     cacheKey,
-    () => fetchSchedulePerformance(options.dateRange),
+    () => fetchSchedulePerformance(options.dateRange, campaignFilter),
     CACHE_TTL_SECONDS,
     { forceRefresh: options.forceRefresh === true },
   );
 }
 
-async function fetchSchedulePerformance(dateRange: DateRange): Promise<SchedulePerformanceReport> {
+function escapeForGaql(value: string): string {
+  return value.replaceAll("'", "\\'");
+}
+
+async function fetchSchedulePerformance(
+  dateRange: DateRange,
+  campaignFilter: string | null,
+): Promise<SchedulePerformanceReport> {
   const customer = await getCustomer();
+  const campaignClause = campaignFilter ? ` AND campaign.name = '${escapeForGaql(campaignFilter)}'` : "";
   const rows = await customer.query(`
     SELECT
       segments.hour,
@@ -54,7 +66,7 @@ async function fetchSchedulePerformance(dateRange: DateRange): Promise<ScheduleP
       metrics.conversions
     FROM campaign
     WHERE segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-      AND campaign.status = 'ENABLED'
+      AND campaign.status = 'ENABLED'${campaignClause}
   `);
 
   const map = new Map<string, ScheduleCell>();
