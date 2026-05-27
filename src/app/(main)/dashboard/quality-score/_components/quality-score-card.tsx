@@ -217,6 +217,39 @@ function compareQsRows(a: QualityScoreRow, b: QualityScoreRow, key: SortKey): nu
   return String(av).localeCompare(String(bv));
 }
 
+function QsTh({
+  label,
+  col,
+  align = "left",
+  title,
+  sortKey,
+  sortDir,
+  onToggle,
+}: {
+  label: string;
+  col: SortKey;
+  align?: "left" | "center" | "right";
+  title?: string;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onToggle: (key: SortKey) => void;
+}) {
+  return (
+    <TableHead
+      className={cn(
+        TABLE_HEAD_STICKY,
+        "cursor-pointer select-none whitespace-nowrap",
+        align === "right" && "text-right",
+        align === "center" && "text-center",
+      )}
+      onClick={() => onToggle(col)}
+      title={title}
+    >
+      {label} {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : ""}
+    </TableHead>
+  );
+}
+
 function QualityScoreTable({ report }: { report: QualityScoreReport }) {
   const [sortKey, setSortKey] = useState<SortKey>("spend");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -243,31 +276,6 @@ function QualityScoreTable({ report }: { report: QualityScoreReport }) {
       setSortDir(key === "keyword" || key === "campaign" || key === "adGroup" ? "asc" : "desc");
     }
   };
-
-  const Th = ({
-    label,
-    col,
-    align = "left",
-    title,
-  }: {
-    label: string;
-    col: SortKey;
-    align?: "left" | "center" | "right";
-    title?: string;
-  }) => (
-    <TableHead
-      className={cn(
-        TABLE_HEAD_STICKY,
-        "cursor-pointer select-none whitespace-nowrap",
-        align === "right" && "text-right",
-        align === "center" && "text-center",
-      )}
-      onClick={() => toggle(col)}
-      title={title}
-    >
-      {label} {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : ""}
-    </TableHead>
-  );
 
   const noData = sorted.every((r) => r.qualityScore === null);
 
@@ -314,49 +322,74 @@ function QualityScoreTable({ report }: { report: QualityScoreReport }) {
         <Table noScrollContainer>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <Th label="Keyword" col="keyword" />
-              <Th label="Match" col="matchType" />
-              <Th label="Campaign" col="campaign" />
-              <Th
+              <QsTh label="Keyword" col="keyword" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              <QsTh label="Match" col="matchType" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              <QsTh label="Campaign" col="campaign" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              <QsTh
                 label="QS"
                 col="qualityScore"
                 align="center"
                 title="Quality Score (1–10). Google's rating of your ad relevance. Drives your auction rank and CPC."
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
               />
-              <Th
+              <QsTh
                 label="Exp. CTR"
                 col="expectedCtr"
                 title="Expected click-through rate — how likely your ad is to get clicked when shown."
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
               />
-              <Th
+              <QsTh
                 label="Ad relevance"
                 col="adRelevance"
                 title="How closely your ad copy matches the intent of the search query."
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
               />
-              <Th
+              <QsTh
                 label="Landing page"
                 col="landingPageExperience"
                 title="How relevant and useful your landing page is to people who clicked your ad."
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
               />
-              <Th
+              <QsTh
                 label="Bottleneck"
                 col="bottleneck"
                 title="Why rank IS is being lost: bid too low, QS too low, or both. Hover for details."
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
               />
-              <Th
+              <QsTh
                 label="Max bid / Page 1 est."
                 col="maxCpcBid"
                 align="right"
                 title="Your max CPC bid vs. Google's first-page CPC estimate. Amber = your bid is less than 90% of what's needed for page 1. Hover a cell for your avg CPC paid."
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
               />
-              <Th label="Spend" col="spend" align="right" />
-              <Th label="Clicks" col="clicks" align="right" />
-              <Th label="Conv." col="conversions" align="right" />
+              <QsTh label="Spend" col="spend" align="right" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              <QsTh label="Clicks" col="clicks" align="right" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              <QsTh
+                label="Conv."
+                col="conversions"
+                align="right"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sorted.map((row, i) => (
-              <TableRow key={`${i}:${row.campaign}:${row.adGroup}:${row.keyword}`}>
+            {sorted.map((row) => (
+              <TableRow key={`${row.campaign}:${row.adGroup}:${row.keyword}`}>
                 <TableCell className="max-w-[200px] font-medium text-xs" title={row.keyword}>
                   {row.keyword}
                 </TableCell>
