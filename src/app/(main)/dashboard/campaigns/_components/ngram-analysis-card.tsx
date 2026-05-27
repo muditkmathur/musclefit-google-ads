@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 
 import { getNgramAnalysis } from "@/app/actions/google-ads";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -12,13 +12,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useScope } from "@/hooks/use-scope";
 import type { NgramAnalysisResult } from "@/types/google-ads";
 
 const WEIGHTS = ["count", "clicks", "impressions", "cost"] as const;
 
-export function NgramAnalysisCard() {
+function NgramAnalysisCardContent() {
+  const scope = useScope();
   const [months, setMonths] = useState<number>(3);
-  const [campaign, setCampaign] = useState("");
   const [weight, setWeight] = useState<(typeof WEIGHTS)[number]>("count");
   const [top, setTop] = useState<number>(50);
   const [loading, setLoading] = useState(false);
@@ -32,7 +33,7 @@ export function NgramAnalysisCard() {
     try {
       const res = await getNgramAnalysis({
         months,
-        campaign: campaign.trim() || null,
+        campaign: scope.campaign,
         options: { weight, top },
       });
       if (!res.ok) throw new Error(res.error);
@@ -63,15 +64,6 @@ export function NgramAnalysisCard() {
               max={24}
               value={months}
               onChange={(e) => setMonths(Number(e.target.value) || 3)}
-            />
-          </div>
-          <div className="min-w-[160px] flex-1 space-y-1.5">
-            <Label htmlFor="ng-campaign">Campaign filter</Label>
-            <Input
-              id="ng-campaign"
-              placeholder="e.g. WhatsApp"
-              value={campaign}
-              onChange={(e) => setCampaign(e.target.value)}
             />
           </div>
           <div className="space-y-1.5 sm:w-40">
@@ -171,5 +163,22 @@ export function NgramAnalysisCard() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+export function NgramAnalysisCard() {
+  return (
+    <Suspense
+      fallback={
+        <Card>
+          <CardHeader>
+            <CardTitle>N-gram analysis</CardTitle>
+            <CardDescription>Loading…</CardDescription>
+          </CardHeader>
+        </Card>
+      }
+    >
+      <NgramAnalysisCardContent />
+    </Suspense>
   );
 }

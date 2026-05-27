@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useScope } from "@/hooks/use-scope";
 import { last30Days } from "@/lib/date-presets";
 import { cn } from "@/lib/utils";
 import type { CampaignGranularity, CampaignReport, CampaignSummaryRow, DateRange } from "@/types/google-ads";
@@ -224,6 +225,8 @@ function CampaignReportCardContent() {
   const pathname = usePathname();
   const router = useRouter();
 
+  const scope = useScope();
+
   const [dateRange, setDateRange] = useState<DateRange>(() => last30Days());
   const [granularity, setGranularity] = useState<CampaignGranularity>("day");
   const [loading, setLoading] = useState(false);
@@ -244,6 +247,7 @@ function CampaignReportCardContent() {
           start: selectedDateRange.start,
           end: selectedDateRange.end,
           granularity: selectedGranularity,
+          campaign: scope.campaign,
           forceRefresh: Boolean(options.forceRefresh),
         });
         if (!result.ok) throw new Error(result.error);
@@ -254,7 +258,7 @@ function CampaignReportCardContent() {
         setLoading(false);
       }
     },
-    [],
+    [scope.campaign],
   );
 
   useEffect(() => {

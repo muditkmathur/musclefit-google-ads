@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useScope } from "@/hooks/use-scope";
 import { last30Days } from "@/lib/date-presets";
 import { cn } from "@/lib/utils";
 import type { AuctionInsightCompetitorRow, AuctionInsightReport, DateRange } from "@/types/google-ads";
@@ -83,24 +84,33 @@ function CampaignSection({ campaign, rows }: { campaign: string; rows: AuctionIn
 }
 
 function AuctionInsightsCardContent() {
+  const scope = useScope();
   const [dateRange, setDateRange] = useState<DateRange>(() => last30Days());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<AuctionInsightReport | null>(null);
 
-  const fetch = useCallback(async (dr: DateRange, opts: { forceRefresh?: boolean } = {}) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await getAuctionInsights({ start: dr.start, end: dr.end, forceRefresh: Boolean(opts.forceRefresh) });
-      if (!res.ok) throw new Error(res.error);
-      setReport(res.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetch = useCallback(
+    async (dr: DateRange, opts: { forceRefresh?: boolean } = {}) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await getAuctionInsights({
+          start: dr.start,
+          end: dr.end,
+          campaign: scope.campaign,
+          forceRefresh: Boolean(opts.forceRefresh),
+        });
+        if (!res.ok) throw new Error(res.error);
+        setReport(res.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [scope.campaign],
+  );
 
   useEffect(() => {
     void fetch({ start: dateRange.start, end: dateRange.end });

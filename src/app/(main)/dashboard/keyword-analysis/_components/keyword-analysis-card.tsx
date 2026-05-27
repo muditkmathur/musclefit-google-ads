@@ -16,6 +16,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useScope } from "@/hooks/use-scope";
 import { cn } from "@/lib/utils";
 import type { KeywordAnalysisBundle, NgramAnalysisResult, SearchTermsReport } from "@/types/google-ads";
 
@@ -427,11 +428,11 @@ function NgramResultView({ result }: { result: NgramAnalysisResult }) {
           <TabsContent key={n} value={String(n)} className="mt-3">
             <div className="mb-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
               <span>
-                <span className="text-green-600 dark:text-green-400 font-medium">Conv. rate</span>: ≥5% good · 1–5% ok ·
+                <span className="font-medium text-green-600 dark:text-green-400">Conv. rate</span>: ≥5% good · 1–5% ok ·
                 0% candidate for negative
               </span>
               <span>
-                <span className="text-green-600 dark:text-green-400 font-medium">CTR</span>: ≥10% good · 5–10% ok ·
+                <span className="font-medium text-green-600 dark:text-green-400">CTR</span>: ≥10% good · 5–10% ok ·
                 &lt;5% low
               </span>
             </div>
@@ -534,6 +535,7 @@ function NgramResultView({ result }: { result: NgramAnalysisResult }) {
 }
 
 function KeywordAnalysisCardContent() {
+  const scope = useScope();
   const [months, setMonths] = useState<number>(3);
   const [weight, setWeight] = useState<(typeof WEIGHTS)[number]>("count");
   const [top, setTop] = useState<number>(50);
@@ -550,7 +552,7 @@ function KeywordAnalysisCardContent() {
       try {
         const res = await getKeywordAnalysisBundle({
           months,
-          campaign: null,
+          campaign: scope.campaign,
           options: { weight, top },
           forceRefresh: Boolean(options.forceRefresh),
         });
@@ -563,7 +565,7 @@ function KeywordAnalysisCardContent() {
         setLoading(false);
       }
     },
-    [months, weight, top],
+    [months, weight, top, scope.campaign],
   );
 
   useEffect(() => {

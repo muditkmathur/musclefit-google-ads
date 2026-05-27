@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useScope } from "@/hooks/use-scope";
 import { cn } from "@/lib/utils";
 import type { ChangeEvent, ChangeHistoryReport } from "@/types/google-ads";
 
@@ -182,7 +183,7 @@ function ChangeHistoryTable({ report }: { report: ChangeHistoryReport }) {
             <TableBody>
               {filtered.map((event, i) => (
                 <TableRow key={`${i}:${event.changeDateTime}:${event.resourceType}`}>
-                  <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+                  <TableCell className="whitespace-nowrap font-mono text-muted-foreground text-xs">
                     {formatDateTime(event.changeDateTime)}
                   </TableCell>
                   <TableCell>
@@ -193,7 +194,7 @@ function ChangeHistoryTable({ report }: { report: ChangeHistoryReport }) {
                     {event.campaignName || "—"}
                   </TableCell>
                   <TableCell
-                    className="max-w-[140px] truncate text-xs text-muted-foreground"
+                    className="max-w-[140px] truncate text-muted-foreground text-xs"
                     title={event.adGroupName || undefined}
                   >
                     {event.adGroupName || "—"}
@@ -201,11 +202,11 @@ function ChangeHistoryTable({ report }: { report: ChangeHistoryReport }) {
                   <TableCell className="max-w-[260px] text-xs" title={event.summary}>
                     <span className="line-clamp-2">{event.summary}</span>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                  <TableCell className="whitespace-nowrap text-muted-foreground text-xs">
                     {event.clientTypeLabel || "—"}
                   </TableCell>
                   <TableCell
-                    className="max-w-[140px] truncate text-xs text-muted-foreground"
+                    className="max-w-[140px] truncate text-muted-foreground text-xs"
                     title={event.userEmail || undefined}
                   >
                     {event.userEmail || "—"}
@@ -221,24 +222,32 @@ function ChangeHistoryTable({ report }: { report: ChangeHistoryReport }) {
 }
 
 function ChangeHistoryCardContent() {
+  const scope = useScope();
   const [days, setDays] = useState("30");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ChangeHistoryReport | null>(null);
 
-  const fetch = useCallback(async (d: string, opts: { forceRefresh?: boolean } = {}) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await getChangeHistory({ days: Number(d), forceRefresh: Boolean(opts.forceRefresh) });
-      if (!res.ok) throw new Error(res.error);
-      setReport(res.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetch = useCallback(
+    async (d: string, opts: { forceRefresh?: boolean } = {}) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await getChangeHistory({
+          days: Number(d),
+          campaign: scope.campaign,
+          forceRefresh: Boolean(opts.forceRefresh),
+        });
+        if (!res.ok) throw new Error(res.error);
+        setReport(res.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [scope.campaign],
+  );
 
   useEffect(() => {
     void fetch(days);

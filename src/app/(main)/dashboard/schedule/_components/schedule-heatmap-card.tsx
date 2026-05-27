@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { useScope } from "@/hooks/use-scope";
 import { last30Days } from "@/lib/date-presets";
 import { cn } from "@/lib/utils";
 import type { DateRange, DayOfWeek, SchedulePerformanceReport } from "@/types/google-ads";
@@ -118,29 +119,34 @@ function ScheduleHeatmap({ report, metric }: { report: SchedulePerformanceReport
 }
 
 function ScheduleHeatmapCardContent() {
+  const scope = useScope();
   const [dateRange, setDateRange] = useState<DateRange>(() => last30Days());
   const [metric, setMetric] = useState<MetricKey>("spend");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<SchedulePerformanceReport | null>(null);
 
-  const fetch = useCallback(async (dr: DateRange, opts: { forceRefresh?: boolean } = {}) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await getSchedulePerformance({
-        start: dr.start,
-        end: dr.end,
-        forceRefresh: Boolean(opts.forceRefresh),
-      });
-      if (!res.ok) throw new Error(res.error);
-      setReport(res.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetch = useCallback(
+    async (dr: DateRange, opts: { forceRefresh?: boolean } = {}) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await getSchedulePerformance({
+          start: dr.start,
+          end: dr.end,
+          campaign: scope.campaign,
+          forceRefresh: Boolean(opts.forceRefresh),
+        });
+        if (!res.ok) throw new Error(res.error);
+        setReport(res.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [scope.campaign],
+  );
 
   useEffect(() => {
     void fetch({ start: dateRange.start, end: dateRange.end });
