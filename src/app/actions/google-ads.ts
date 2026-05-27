@@ -109,6 +109,7 @@ export async function getSearchTermsReport(
 export interface CampaignReportActionInput {
   start: string;
   end: string;
+  campaign?: string | null;
   granularity?: CampaignGranularity;
   saveToDisk?: boolean;
   forceRefresh?: boolean;
@@ -123,8 +124,10 @@ export async function getCampaignReport(input: CampaignReportActionInput): Promi
       ? (input.granularity as CampaignGranularity)
       : "day";
 
+    const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
     const data = await runCampaignReport({
       dateRange: { start: input.start, end: input.end },
+      campaign,
       granularity,
       includeDaily: true,
       includeDemographics: true,
@@ -217,6 +220,7 @@ export async function getCampaignKeywords(
 export interface QualityScoreActionInput {
   start: string;
   end: string;
+  campaign?: string | null;
   forceRefresh?: boolean;
 }
 
@@ -224,8 +228,10 @@ export async function getQualityScore(input: QualityScoreActionInput): Promise<A
   try {
     const rangeError = validateDateRange(input.start, input.end);
     if (rangeError) return { ok: false, error: rangeError };
+    const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
     const data = await runQualityScore({
       dateRange: { start: input.start, end: input.end },
+      campaign,
       forceRefresh: Boolean(input.forceRefresh),
     });
     return { ok: true, data };
@@ -237,6 +243,7 @@ export async function getQualityScore(input: QualityScoreActionInput): Promise<A
 
 export interface ChangeHistoryActionInput {
   days?: number;
+  campaign?: string | null;
   forceRefresh?: boolean;
 }
 
@@ -245,8 +252,10 @@ export async function getChangeHistory(
 ): Promise<ActionResult<ChangeHistoryReport>> {
   try {
     const days = Number(input.days);
+    const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
     const data = await runChangeHistory({
       days: Number.isFinite(days) && days > 0 ? Math.min(days, 30) : 30,
+      campaign,
       forceRefresh: Boolean(input.forceRefresh),
     });
     return { ok: true, data };
@@ -259,6 +268,7 @@ export async function getChangeHistory(
 export interface SchedulePerformanceActionInput {
   start: string;
   end: string;
+  campaign?: string | null;
   forceRefresh?: boolean;
 }
 
@@ -268,8 +278,10 @@ export async function getSchedulePerformance(
   try {
     const rangeError = validateDateRange(input.start, input.end);
     if (rangeError) return { ok: false, error: rangeError };
+    const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
     const data = await runSchedulePerformance({
       dateRange: { start: input.start, end: input.end },
+      campaign,
       forceRefresh: Boolean(input.forceRefresh),
     });
     return { ok: true, data };
@@ -282,6 +294,7 @@ export async function getSchedulePerformance(
 export interface AdGroupReportActionInput {
   start: string;
   end: string;
+  campaign?: string | null;
   forceRefresh?: boolean;
 }
 
@@ -289,8 +302,10 @@ export async function getAdGroupReport(input: AdGroupReportActionInput): Promise
   try {
     const rangeError = validateDateRange(input.start, input.end);
     if (rangeError) return { ok: false, error: rangeError };
+    const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
     const data = await runAdGroupReport({
       dateRange: { start: input.start, end: input.end },
+      campaign,
       forceRefresh: Boolean(input.forceRefresh),
     });
     return { ok: true, data };
@@ -303,6 +318,7 @@ export async function getAdGroupReport(input: AdGroupReportActionInput): Promise
 export interface DevicePerformanceActionInput {
   start: string;
   end: string;
+  campaign?: string | null;
   forceRefresh?: boolean;
 }
 
@@ -312,8 +328,10 @@ export async function getDevicePerformance(
   try {
     const rangeError = validateDateRange(input.start, input.end);
     if (rangeError) return { ok: false, error: rangeError };
+    const campaign = input.campaign?.trim() ? input.campaign.trim() : null;
     const data = await runDevicePerformance({
       dateRange: { start: input.start, end: input.end },
+      campaign,
       forceRefresh: Boolean(input.forceRefresh),
     });
     return { ok: true, data };
