@@ -1,4 +1,17 @@
-import { Clock, History, Layers, type LucideIcon, Megaphone, Monitor, Star, TextSearch } from "lucide-react";
+import {
+  ChartScatter,
+  Clock,
+  FileText,
+  History,
+  Layers,
+  type LucideIcon,
+  Megaphone,
+  Monitor,
+  Search,
+  SquarePen,
+  Star,
+  TextSearch,
+} from "lucide-react";
 
 export interface NavSubItem {
   title: string;
@@ -59,6 +72,26 @@ export const sidebarItems: NavGroup[] = [
         title: "Quality Score",
         url: "/dashboard/quality-score",
         icon: Star,
+      },
+      {
+        title: "Landing pages",
+        url: "/dashboard/landing-pages",
+        icon: FileText,
+      },
+      {
+        title: "Keyword ↔ Search terms",
+        url: "/dashboard/keyword-search-terms",
+        icon: Search,
+      },
+      {
+        title: "Ad performance",
+        url: "/dashboard/ad-performance",
+        icon: SquarePen,
+      },
+      {
+        title: "Auction insights",
+        url: "/dashboard/auction-insights",
+        icon: ChartScatter,
       },
       {
         title: "Change history",

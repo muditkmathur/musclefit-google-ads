@@ -138,7 +138,7 @@ function KpiCard({ metric, current, previous, rangeLabel, loading }: KpiCardProp
           {showSkeleton ? (
             <Skeleton className="h-7 w-24" />
           ) : (
-            <div className="text-2xl leading-none tracking-tight tabular-nums">{metric.format(current ?? 0)}</div>
+            <div className="text-2xl tabular-nums leading-none tracking-tight">{metric.format(current ?? 0)}</div>
           )}
           {showSkeleton ? (
             <Skeleton className="h-5 w-12 rounded-full" />

@@ -73,7 +73,7 @@ interface ResolvedOptions {
 }
 
 function resolveOptions(opts: NgramAnalysisOptions): ResolvedOptions {
-  const n = (opts.n && opts.n.length ? opts.n : [1, 2, 3, 4]).filter((x) => Number.isFinite(x) && x >= 1 && x <= 5);
+  const n = (opts.n?.length ? opts.n : [1, 2, 3, 4]).filter((x) => Number.isFinite(x) && x >= 1 && x <= 5);
   return {
     n: n.length ? n : [1, 2, 3],
     top: Math.max(1, opts.top ?? 50),
@@ -125,7 +125,6 @@ function getWeight(row: Partial<SearchTermRow>, weight: ResolvedOptions["weight"
       return Number(row.impressions ?? 0) || 0;
     case "cost":
       return Number(row.cost ?? 0) || 0;
-    case "count":
     default:
       return 1;
   }

@@ -29,7 +29,7 @@ async function main() {
         "Ad Group": r.adGroup,
         Clicks: r.clicks,
         Impressions: r.impressions,
-        CTR: (r.ctr * 100).toFixed(2) + "%",
+        CTR: `${(r.ctr * 100).toFixed(2)}%`,
         "Cost (₹)": r.cost.toFixed(2),
         Conversions: r.conversions,
         "Conv. value": r.conversionValue,

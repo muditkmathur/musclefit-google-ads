@@ -220,7 +220,9 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
           <div className="p-3">
             <div className="mb-2 flex gap-2">
               <div className="flex flex-col gap-0.5">
-                <label htmlFor="drp-start" className="text-muted-foreground text-xs">Start date</label>
+                <label htmlFor="drp-start" className="text-muted-foreground text-xs">
+                  Start date
+                </label>
                 <Input
                   id="drp-start"
                   className="h-7 w-28 text-xs"
@@ -230,7 +232,9 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
                 />
               </div>
               <div className="flex flex-col gap-0.5">
-                <label htmlFor="drp-end" className="text-muted-foreground text-xs">End date</label>
+                <label htmlFor="drp-end" className="text-muted-foreground text-xs">
+                  End date
+                </label>
                 <Input
                   id="drp-end"
                   className="h-7 w-28 text-xs"

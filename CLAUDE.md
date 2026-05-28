@@ -29,7 +29,7 @@ There is **no test suite** — no testing framework is installed.
 ## Architecture
 
 ### What this is
-A Next.js dashboard and CLI toolset for managing and reporting on Google Ads campaigns for muscle fit. All pages under the **Google Ads** sidebar group are active and backed by real API calls: Campaigns, Keyword Analysis, Ad Groups, Schedule (hour×day heatmap), Devices, Quality Score, and Change History. The **Pages** sidebar group has auth page stubs (login/register v1/v2). The **Legacy** sidebar group contains old v1 dashboards kept for reference.
+A Next.js dashboard and CLI toolset for managing and reporting on Google Ads campaigns for muscle fit. All pages under the **Google Ads** sidebar group are active and backed by real API calls: Campaigns, Keyword Analysis, Ad Groups, Schedule (hour×day heatmap), Devices, Quality Score, Landing pages, Keyword ↔ Search terms, Ad performance, Auction insights, and Change history. The **Pages** sidebar group has auth page stubs (login/register v1/v2). The **Legacy** sidebar group contains old v1 dashboards kept for reference.
 
 ### Request flow
 ```
@@ -50,6 +50,10 @@ All server actions return `ActionResult<T> = { ok: true; data: T } | { ok: false
 - **`report.ts`** — campaign summary, daily breakdown (DoD deltas), and demographics (age_range_view / gender_view) reports.
 - **`search-terms.ts`**, **`ngram-analysis.ts`**, **`keyword-analysis.ts`**, **`campaign-keywords.ts`** — search term and keyword analysis modules.
 - **`ad-group-report.ts`**, **`device-performance.ts`**, **`quality-score.ts`**, **`schedule-performance.ts`**, **`change-history.ts`** — per-dimension reports matching the sidebar pages of the same name.
+- **`landing-page-report.ts`** — `landing_page_view` aggregated by unexpanded final URL with waste flag and ad-group attribution.
+- **`keyword-search-term-map.ts`** — `search_term_view` segmented by `segments.keyword.info.text` to attribute each query to the triggering keyword, with intent-mismatch / broad-trigger / waste flags. DSA traffic is excluded by the keyword segment.
+- **`ad-performance.ts`** — `ad_group_ad` + `ad_group_ad_asset_view` for per-ad metrics, RSA ad strength, and per-asset (headline / description) performance labels.
+- **`auction-insights.ts`** — `keyword_view` with `segments.auction_insight_domain` to surface competitor domains; pre-aggregated per campaign (impression-weighted) plus raw keyword × domain rows.
 
 All monetary values from the API are in micros; divide by `1_000_000` to get INR (₹).
 
@@ -103,6 +107,26 @@ Stores CLI script output files (JSON, CSV). The `saveToDisk: true` option on `ru
 - Notable enforced rules: `noImportCycles`, `noFloatingPromises`, `noMisusedPromises`, `useNullishCoalescing`, `useSortedClasses` (Tailwind).
 - `src/components/ui` is excluded from all Biome checks.
 - File naming convention is enforced (`useFilenamingConvention`).
+
+## MCP server (`scripts/mcp-server.ts`)
+
+Registered in `.mcp.json` and `.cursor/mcp.json`. Cursor must enable the **google-ads** server (Settings → Tools & MCP). All tools accept optional `force_refresh: boolean` to bypass Redis cache.
+
+| Tool | Lib function |
+|------|----------------|
+| `get_campaign_report` | `runCampaignReport` |
+| `get_search_terms` | `runSearchTermsReport` |
+| `get_keyword_analysis` | `runKeywordAnalysisBundle` |
+| `get_ad_groups` | `runAdGroupReport` |
+| `get_device_performance` | `runDevicePerformance` |
+| `get_quality_score` | `runQualityScore` |
+| `get_schedule_performance` | `runSchedulePerformance` |
+| `get_change_history` | `runChangeHistory` |
+| `get_campaign_keywords` | `runCampaignKeywords` |
+| `get_landing_page_report` | `runLandingPageReport` |
+| `get_keyword_search_term_map` | `runKeywordSearchTermMap` |
+| `get_ad_performance` | `runAdPerformance` |
+| `get_auction_insights` | `runAuctionInsights` |
 
 ## Scripts config
 Scripts live in `scripts/` and use `tsx` with `dotenv/config` to load `.env`. They share the same `src/lib/google-ads/` modules as the Next.js app but run outside Next's server context.
