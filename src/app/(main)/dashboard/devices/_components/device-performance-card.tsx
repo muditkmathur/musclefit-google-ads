@@ -6,7 +6,6 @@ import { RefreshCw } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 
 import { getDevicePerformance } from "@/app/actions/google-ads";
-import { DateRangePicker } from "@/components/date-range-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,8 +14,8 @@ import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } f
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useDateRange } from "@/hooks/use-date-range";
 import { useScope } from "@/hooks/use-scope";
-import { last30Days } from "@/lib/date-presets";
 import type { DateRange, DevicePerformanceReport, DeviceRow } from "@/types/google-ads";
 
 type ChartMetric = "spend" | "clicks" | "conversions" | "cpa";
@@ -138,7 +137,7 @@ function DeviceTable({ rows }: { rows: DeviceRow[] }) {
 
 function DevicePerformanceCardContent() {
   const scope = useScope();
-  const [dateRange, setDateRange] = useState<DateRange>(() => last30Days());
+  const [dateRange] = useDateRange();
   const [chartMetric, setChartMetric] = useState<ChartMetric>("spend");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -180,8 +179,6 @@ function DevicePerformanceCardContent() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <DateRangePicker value={dateRange} onChange={setDateRange} />
-
           <Select value={chartMetric} onValueChange={(v) => setChartMetric(v as ChartMetric)}>
             <SelectTrigger className="w-36">
               <SelectValue />
