@@ -5,14 +5,13 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { getSchedulePerformance } from "@/app/actions/google-ads";
-import { DateRangePicker } from "@/components/date-range-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { useDateRange } from "@/hooks/use-date-range";
 import { useScope } from "@/hooks/use-scope";
-import { last30Days } from "@/lib/date-presets";
 import { cn } from "@/lib/utils";
 import type { DateRange, DayOfWeek, SchedulePerformanceReport } from "@/types/google-ads";
 
@@ -120,7 +119,7 @@ function ScheduleHeatmap({ report, metric }: { report: SchedulePerformanceReport
 
 function ScheduleHeatmapCardContent() {
   const scope = useScope();
-  const [dateRange, setDateRange] = useState<DateRange>(() => last30Days());
+  const [dateRange] = useDateRange();
   const [metric, setMetric] = useState<MetricKey>("spend");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -162,8 +161,6 @@ function ScheduleHeatmapCardContent() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <DateRangePicker value={dateRange} onChange={setDateRange} />
-
           <Select value={metric} onValueChange={(v) => setMetric(v as MetricKey)}>
             <SelectTrigger className="w-40">
               <SelectValue />
