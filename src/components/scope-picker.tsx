@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { useRouter, useSearchParams } from "next/navigation";
-
 import { ChevronDown, ChevronRight, LayoutGrid, MonitorPlay, Search, ShoppingBag, Video, Zap } from "lucide-react";
 
 import { getScopeOptions } from "@/app/actions/google-ads";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useFiltersStore } from "@/stores/filters/filters-provider";
 import type { ScopeCampaign, ScopeOptions } from "@/types/google-ads";
 
 function campaignIcon(type: string) {
@@ -36,10 +35,9 @@ function triggerLabel(campaign: string | null, adGroup: string | null): string {
 }
 
 export function ScopePicker() {
-  const router = useRouter();
-  const params = useSearchParams();
-  const campaign = params.get("campaign");
-  const adGroup = params.get("adGroup");
+  const campaign = useFiltersStore((s) => s.campaign);
+  const adGroup = useFiltersStore((s) => s.adGroup);
+  const setScope = useFiltersStore((s) => s.setScope);
 
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<ScopeOptions | null>(null);
@@ -63,22 +61,11 @@ export function ScopePicker() {
 
   const select = useCallback(
     (c: string | null, ag: string | null) => {
-      const p = new URLSearchParams(params.toString());
-      if (c) {
-        p.set("campaign", c);
-      } else {
-        p.delete("campaign");
-      }
-      if (ag) {
-        p.set("adGroup", ag);
-      } else {
-        p.delete("adGroup");
-      }
-      router.push(`?${p.toString()}`);
+      setScope(c, ag);
       setOpen(false);
       setQuery("");
     },
-    [router, params],
+    [setScope],
   );
 
   const toggleExpand = (name: string) =>
