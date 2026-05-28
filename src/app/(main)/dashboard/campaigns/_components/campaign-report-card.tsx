@@ -8,15 +8,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 
 import { getCampaignReport } from "@/app/actions/google-ads";
-import { DateRangePicker } from "@/components/date-range-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useDateRange } from "@/hooks/use-date-range";
 import { useScope } from "@/hooks/use-scope";
-import { last30Days } from "@/lib/date-presets";
 import { cn } from "@/lib/utils";
 import type { CampaignGranularity, CampaignReport, CampaignSummaryRow, DateRange } from "@/types/google-ads";
 
@@ -226,8 +225,8 @@ function CampaignReportCardContent() {
   const router = useRouter();
 
   const scope = useScope();
+  const [dateRange] = useDateRange();
 
-  const [dateRange, setDateRange] = useState<DateRange>(() => last30Days());
   const [granularity, setGranularity] = useState<CampaignGranularity>("day");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -327,8 +326,6 @@ function CampaignReportCardContent() {
       <CardContent className="space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="flex items-center gap-2">
-            <DateRangePicker value={dateRange} onChange={setDateRange} />
-
             <Select value={granularity} onValueChange={(v) => setGranularity(v as CampaignGranularity)}>
               <SelectTrigger className="w-28" aria-label="Granularity">
                 <SelectValue placeholder="Granularity" />
