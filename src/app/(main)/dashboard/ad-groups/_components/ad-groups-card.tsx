@@ -54,16 +54,55 @@ function compareValues(a: AdGroupRow[SortKey], b: AdGroupRow[SortKey]): number {
   return String(a).localeCompare(String(b));
 }
 
-function IsCell({ value }: { value: number | null }) {
-  if (value === null) return <TableCell className="text-right text-muted-foreground text-xs">N/A</TableCell>;
-  const pct = value * 100;
-  const color =
-    pct >= 70
-      ? "text-green-600 dark:text-green-400"
-      : pct >= 40
-        ? "text-amber-600 dark:text-amber-400"
-        : "text-destructive";
-  return <TableCell className={cn("text-right text-xs tabular-nums", color)}>{pct.toFixed(0)}%</TableCell>;
+function IsBar({
+  is,
+  lostBudget,
+  lostRank,
+}: {
+  is: number | null;
+  lostBudget: number | null;
+  lostRank: number | null;
+}) {
+  if (is === null) {
+    return <TableCell className="text-muted-foreground text-xs">N/A</TableCell>;
+  }
+
+  const won = is;
+  const budget = lostBudget ?? 0;
+  const rank = lostRank ?? 0;
+  const wonPct = (won * 100).toFixed(0);
+  const budgetPct = (budget * 100).toFixed(0);
+  const rankPct = (rank * 100).toFixed(0);
+  const tooltip = `Won: ${wonPct}% · Lost to budget: ${budgetPct}% · Lost to rank: ${rankPct}%`;
+
+  const isColor =
+    won >= 0.7
+      ? "bg-green-500 dark:bg-green-600"
+      : won >= 0.4
+        ? "bg-amber-400 dark:bg-amber-500"
+        : "bg-red-500 dark:bg-red-600";
+
+  return (
+    <TableCell title={tooltip}>
+      <div className="flex min-w-[100px] flex-col gap-1">
+        <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+          <div className={cn("h-full", isColor)} style={{ width: `${won * 100}%` }} />
+          <div className="h-full bg-amber-300 dark:bg-amber-500/70" style={{ width: `${budget * 100}%` }} />
+          <div className="h-full bg-destructive/70" style={{ width: `${rank * 100}%` }} />
+        </div>
+        <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums">
+          <span className="font-medium text-foreground">{wonPct}%</span>
+          {budget > 0.01 && <span className="text-amber-600 dark:text-amber-400">{budgetPct}% bgt</span>}
+          {rank > 0.01 && <span className="text-destructive">{rankPct}% rnk</span>}
+        </div>
+      </div>
+    </TableCell>
+  );
+}
+
+function PctCell({ value }: { value: number | null }) {
+  if (value === null) return <TableCell className="text-right text-muted-foreground text-xs">—</TableCell>;
+  return <TableCell className="text-right text-xs tabular-nums">{(value * 100).toFixed(0)}%</TableCell>;
 }
 
 function AdGroupsTable({ report }: { report: AdGroupReport }) {
@@ -156,6 +195,14 @@ function AdGroupsTable({ report }: { report: AdGroupReport }) {
                 sortDir={sortDir}
                 onToggle={toggle}
               />
+              <SortableTh label="Top IS" col="topIs" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              <SortableTh
+                label="Abs. Top IS"
+                col="absoluteTopIs"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -172,7 +219,9 @@ function AdGroupsTable({ report }: { report: AdGroupReport }) {
                 <TableCell className="text-right text-xs tabular-nums">{row.conversions.toLocaleString()}</TableCell>
                 <TableCell className="text-right text-xs tabular-nums">{row.cpa}</TableCell>
                 <TableCell className="text-right text-xs tabular-nums">{row.ctr}</TableCell>
-                <IsCell value={row.impressionShare} />
+                <IsBar is={row.impressionShare} lostBudget={row.lostIsBudget} lostRank={row.lostIsRank} />
+                <PctCell value={row.topIs} />
+                <PctCell value={row.absoluteTopIs} />
               </TableRow>
             ))}
           </TableBody>
@@ -220,8 +269,8 @@ function AdGroupsCardContent() {
       <CardHeader>
         <CardTitle>Ad groups</CardTitle>
         <CardDescription>
-          Per-ad-group performance with Impression Share (search campaigns only). IS colored: green ≥ 70% · amber 40–70%
-          · red &lt; 40%.
+          Per-ad-group performance with full Impression Share breakdown. IS bar: green = won · amber = lost to budget ·
+          red = lost to rank. Top IS = % of auctions at top of page. Abs. Top IS = % at absolute top (position 1).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

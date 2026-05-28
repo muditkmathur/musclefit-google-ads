@@ -338,6 +338,8 @@ export interface AdGroupRow {
   impressionShare: number | null;
   lostIsBudget: number | null;
   lostIsRank: number | null;
+  topIs: number | null;
+  absoluteTopIs: number | null;
 }
 
 export interface AdGroupReport {
