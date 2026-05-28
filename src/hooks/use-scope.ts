@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useFiltersStore } from "@/stores/filters/filters-provider";
 
 export interface Scope {
   campaign: string | null;
@@ -8,9 +8,7 @@ export interface Scope {
 }
 
 export function useScope(): Scope {
-  const params = useSearchParams();
-  return {
-    campaign: params.get("campaign"),
-    adGroup: params.get("adGroup"),
-  };
+  const campaign = useFiltersStore((s) => s.campaign);
+  const adGroup = useFiltersStore((s) => s.adGroup);
+  return { campaign, adGroup };
 }
