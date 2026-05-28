@@ -5,15 +5,14 @@ import { Fragment, Suspense, useCallback, useEffect, useMemo, useState } from "r
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 
 import { getAdPerformance } from "@/app/actions/google-ads";
-import { DateRangePicker } from "@/components/date-range-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useDateRange } from "@/hooks/use-date-range";
 import { useScope } from "@/hooks/use-scope";
-import { last30Days } from "@/lib/date-presets";
 import { cn } from "@/lib/utils";
 import type {
   AdAssetPerformanceRow,
@@ -305,7 +304,7 @@ function AdsTable({ report }: { report: AdPerformanceReport }) {
 
 function AdPerformanceCardContent() {
   const scope = useScope();
-  const [dateRange, setDateRange] = useState<DateRange>(() => last30Days());
+  const [dateRange] = useDateRange();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<AdPerformanceReport | null>(null);
@@ -348,8 +347,6 @@ function AdPerformanceCardContent() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <DateRangePicker value={dateRange} onChange={setDateRange} />
-
           {report && !loading && (
             <span className="text-muted-foreground text-xs">
               {report.dateRange.start} → {report.dateRange.end}
