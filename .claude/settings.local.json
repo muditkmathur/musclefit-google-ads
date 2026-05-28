@@ -20,6 +20,8 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git stash *)",
+      "Bash(git status *)",
+      "Bash(git log *)",
       "Skill(update-config)",
       "mcp__google-ads__get_campaign_report",
       "mcp__google-ads__get_ad_groups",
@@ -29,10 +31,21 @@
       "mcp__google-ads__get_change_history",
       "mcp__google-ads__get_device_performance",
       "mcp__google-ads__get_keyword_analysis",
-      "mcp__google-ads__get_schedule_performance"
+      "mcp__google-ads__get_schedule_performance",
+      "mcp__google-ads__get_landing_page_report",
+      "mcp__google-ads__get_keyword_search_term_map",
+      "mcp__google-ads__get_ad_performance",
+      "mcp__google-ads__get_auction_insights",
+      "WebFetch(domain:www.musclefitspa.com)",
+      "Bash(pnpm exec *)",
+      "Bash(pnpm biome *)",
+      "Bash(git -C /Users/muditmathur/workspace/musclefit/google-ads add \"src/app/\\(main\\)/dashboard/campaigns/_components/campaign-report-card.tsx\")",
+      "Bash(git -C /Users/muditmathur/workspace/musclefit/google-ads commit -m ' *)",
+      "Bash(npx biome *)",
+      "Bash(git -C /Users/muditmathur/workspace/musclefit/google-ads show b380c69^:scripts/search-terms.ts)",
+      "Bash(bash *)",
+      "WebFetch(domain:localhost)"
     ]
   },
-  "enabledMcpjsonServers": [
-    "google-ads"
-  ]
+  "enabledMcpjsonServers": ["google-ads"]
 }
