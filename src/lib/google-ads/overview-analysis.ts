@@ -1,3 +1,6 @@
+import { z } from "zod";
+
+import { getAnthropicClient, OVERVIEW_MODEL } from "@/lib/anthropic/client";
 import { runAdPerformance } from "@/lib/google-ads/ad-performance";
 import { runAuctionInsights } from "@/lib/google-ads/auction-insights";
 import { runChangeHistory } from "@/lib/google-ads/change-history";
@@ -7,6 +10,7 @@ import { runQualityScore } from "@/lib/google-ads/quality-score";
 import { runCampaignReport } from "@/lib/google-ads/report";
 import type {
   AdStrengthLabel,
+  CampaignInsight,
   DateRange,
   OverviewCampaignContext,
   OverviewContext,
@@ -90,4 +94,58 @@ export async function buildOverviewContext(dateRange: DateRange): Promise<Overvi
   });
 
   return { dateRange, campaigns };
+}
+
+const CampaignInsightSchema = z.object({
+  campaignId: z.string(),
+  campaignName: z.string(),
+  health: z.enum(["on-track", "needs-attention", "at-risk"]),
+  summary: z.string(),
+  nextSteps: z.array(z.string()),
+});
+
+const CampaignInsightsResponseSchema = z.object({
+  insights: z.array(CampaignInsightSchema),
+});
+
+const SYSTEM_PROMPT = `You are a Google Ads performance analyst. You will receive a JSON array of \
+per-campaign metrics (spend, conversions, CPA, CTR, impression share, quality score bottlenecks, \
+wasted spend on landing pages/search terms, ad strength, competitor overlap, and recent account \
+change counts) for a fixed date range.
+
+For each campaign, respond with a "health" label ("on-track", "needs-attention", or "at-risk"), a \
+1-2 sentence "summary" of what's driving that label, and a prioritized "nextSteps" array (2-4 concrete, \
+specific actions referencing the actual numbers given — e.g. name the wasted search term or landing page \
+URL, not a generic suggestion).
+
+Respond with ONLY a JSON object of the shape: {"insights": [{"campaignId": string, "campaignName": string, \
+"health": "on-track"|"needs-attention"|"at-risk", "summary": string, "nextSteps": string[]}]}. No prose \
+outside the JSON.`;
+
+function extractJson(text: string): unknown {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("Claude response did not contain a JSON object");
+  }
+  return JSON.parse(text.slice(start, end + 1));
+}
+
+export async function generateCampaignInsights(context: OverviewContext): Promise<CampaignInsight[]> {
+  const client = getAnthropicClient();
+
+  const response = await client.messages.create({
+    model: OVERVIEW_MODEL,
+    max_tokens: 4096,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: JSON.stringify(context.campaigns) }],
+  });
+
+  const textBlock = response.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("Claude response contained no text block");
+  }
+
+  const parsed = CampaignInsightsResponseSchema.parse(extractJson(textBlock.text));
+  return parsed.insights;
 }
