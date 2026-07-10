@@ -10,6 +10,7 @@ import { runKeywordAnalysisBundle } from "@/lib/google-ads/keyword-analysis";
 import { runKeywordSearchTermMap } from "@/lib/google-ads/keyword-search-term-map";
 import { runLandingPageReport } from "@/lib/google-ads/landing-page-report";
 import { analyzeNgrams } from "@/lib/google-ads/ngram-analysis";
+import { askOverviewFollowup, loadOverviewThread, runOverviewAnalysis } from "@/lib/google-ads/overview-analysis";
 import { runQualityScore } from "@/lib/google-ads/quality-score";
 import { runCampaignReport } from "@/lib/google-ads/report";
 import { runSchedulePerformance } from "@/lib/google-ads/schedule-performance";
@@ -29,6 +30,8 @@ import type {
   LandingPageReport,
   NgramAnalysisOptions,
   NgramAnalysisResult,
+  OverviewChatMessage,
+  OverviewThread,
   QualityScoreReport,
   SchedulePerformanceReport,
   ScopeOptions,
@@ -485,6 +488,64 @@ export async function getKeywordAnalysisBundle(
 export async function getScopeOptions(input: { forceRefresh?: boolean } = {}): Promise<ActionResult<ScopeOptions>> {
   try {
     const data = await runScopeOptions({ forceRefresh: Boolean(input.forceRefresh) });
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface OverviewDateRangeInput {
+  start: string;
+  end: string;
+}
+
+export async function getOverviewThread(input: OverviewDateRangeInput): Promise<ActionResult<OverviewThread | null>> {
+  try {
+    const rangeError = validateDateRange(input.start, input.end);
+    if (rangeError) return { ok: false, error: rangeError };
+    const data = await loadOverviewThread({ start: input.start, end: input.end });
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface RunOverviewAnalysisActionInput extends OverviewDateRangeInput {
+  forceRefresh?: boolean;
+}
+
+export async function runOverviewAnalysisAction(
+  input: RunOverviewAnalysisActionInput,
+): Promise<ActionResult<OverviewThread>> {
+  try {
+    const rangeError = validateDateRange(input.start, input.end);
+    if (rangeError) return { ok: false, error: rangeError };
+    const data = await runOverviewAnalysis(
+      { start: input.start, end: input.end },
+      { forceRefresh: Boolean(input.forceRefresh) },
+    );
+    return { ok: true, data };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: toError(err) };
+  }
+}
+
+export interface AskOverviewFollowupActionInput extends OverviewDateRangeInput {
+  question: string;
+}
+
+export async function askOverviewFollowupAction(
+  input: AskOverviewFollowupActionInput,
+): Promise<ActionResult<OverviewChatMessage[]>> {
+  try {
+    const rangeError = validateDateRange(input.start, input.end);
+    if (rangeError) return { ok: false, error: rangeError };
+    const question = input.question.trim();
+    if (!question) return { ok: false, error: "Question must not be empty" };
+    const data = await askOverviewFollowup({ start: input.start, end: input.end }, question);
     return { ok: true, data };
   } catch (err) {
     console.error(err);
