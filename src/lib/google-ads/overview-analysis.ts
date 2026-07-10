@@ -15,6 +15,7 @@ import type {
   CampaignInsight,
   DateRange,
   OverviewCampaignContext,
+  OverviewChatMessage,
   OverviewContext,
   OverviewThread,
   QualityScoreBottleneck,
@@ -200,4 +201,38 @@ export async function runOverviewAnalysis(
 
   await saveOverviewThread(dateRange, thread);
   return thread;
+}
+
+export async function askOverviewFollowup(dateRange: DateRange, question: string): Promise<OverviewChatMessage[]> {
+  const thread = await loadOverviewThread(dateRange);
+  if (!thread) {
+    throw new Error("No analysis found for this date range — run Analyze first.");
+  }
+
+  const client = getAnthropicClient();
+
+  const history = thread.messages.map((m) => ({ role: m.role, content: m.content }));
+
+  const response = await client.messages.create({
+    model: OVERVIEW_MODEL,
+    max_tokens: 2048,
+    system: `You are a Google Ads performance analyst. The user previously received this per-campaign \
+analysis (JSON): ${JSON.stringify(thread.analysis.insights)}. Answer their follow-up questions grounded \
+strictly in this data. If asked about something not covered by the data, say so plainly rather than \
+guessing.`,
+    messages: [...history, { role: "user" as const, content: question }],
+  });
+
+  const textBlock = response.content.find((block) => block.type === "text");
+  const answer = textBlock && textBlock.type === "text" ? textBlock.text : "";
+
+  const now = new Date().toISOString();
+  const updatedMessages: OverviewChatMessage[] = [
+    ...thread.messages,
+    { role: "user", content: question, createdAt: now },
+    { role: "assistant", content: answer, createdAt: now },
+  ];
+
+  await saveOverviewThread(dateRange, { ...thread, messages: updatedMessages });
+  return updatedMessages;
 }
