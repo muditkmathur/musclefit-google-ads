@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { RefreshCw } from "lucide-react";
-
 import { getOverviewThread, runOverviewAnalysisAction } from "@/app/actions/google-ads";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -56,21 +54,10 @@ export function OverviewContent() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" onClick={() => void handleAnalyze(false)} disabled={analyzing || loadingCached}>
+        <Button type="button" onClick={() => void handleAnalyze(Boolean(thread))} disabled={analyzing || loadingCached}>
           {analyzing ? <Spinner className="mr-2 size-4" /> : null}
           {thread ? "Re-analyze" : "Analyze"}
         </Button>
-        {thread && (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={() => void handleAnalyze(true)}
-            disabled={analyzing}
-          >
-            <RefreshCw className="size-4" />
-          </Button>
-        )}
         {thread && (
           <span className="text-muted-foreground text-xs">
             Generated {new Date(thread.analysis.generatedAt).toLocaleString()}

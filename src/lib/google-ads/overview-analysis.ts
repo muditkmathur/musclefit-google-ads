@@ -136,11 +136,16 @@ function extractJson(text: string): unknown {
 }
 
 export async function generateCampaignInsights(context: OverviewContext): Promise<CampaignInsight[]> {
+  if (context.campaigns.length === 0) {
+    return [];
+  }
+
   const client = getAnthropicClient();
 
   const response = await client.messages.create({
     model: OVERVIEW_MODEL,
     max_tokens: 4096,
+    thinking: { type: "disabled" },
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: JSON.stringify(context.campaigns) }],
   });
@@ -206,6 +211,11 @@ export async function runOverviewAnalysis(
 export async function askOverviewFollowup(dateRange: DateRange, question: string): Promise<OverviewChatMessage[]> {
   const thread = await loadOverviewThread(dateRange);
   if (!thread) {
+    if (!getRedis()) {
+      throw new Error(
+        "Follow-up chat requires Redis to be configured (REDIS_HOST) to store the analysis between requests. Currently unavailable.",
+      );
+    }
     throw new Error("No analysis found for this date range — run Analyze first.");
   }
 
@@ -216,6 +226,7 @@ export async function askOverviewFollowup(dateRange: DateRange, question: string
   const response = await client.messages.create({
     model: OVERVIEW_MODEL,
     max_tokens: 2048,
+    thinking: { type: "disabled" },
     system: `You are a Google Ads performance analyst. The user previously received this per-campaign \
 analysis (JSON): ${JSON.stringify(thread.analysis.insights)}. Answer their follow-up questions grounded \
 strictly in this data. If asked about something not covered by the data, say so plainly rather than \
