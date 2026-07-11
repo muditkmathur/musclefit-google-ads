@@ -1,4 +1,10 @@
-import "dotenv/config";
+import { config } from "dotenv";
+
+import path from "node:path";
+
+config({ path: path.resolve(process.cwd(), ".env") });
+config({ path: path.resolve(process.cwd(), ".env.local"), override: true });
+
 import { DEFAULT_SEARCH_TERMS_OUTPUT, runSearchTermsReport } from "../src/lib/google-ads/search-terms";
 
 async function main() {

@@ -1,4 +1,9 @@
-import "dotenv/config";
+import { config } from "dotenv";
+
+import path from "node:path";
+
+config({ path: path.resolve(process.cwd(), ".env") });
+config({ path: path.resolve(process.cwd(), ".env.local"), override: true });
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
