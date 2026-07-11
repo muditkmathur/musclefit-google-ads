@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+
 import { askOverviewFollowupAction } from "@/app/actions/google-ads";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +13,29 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { DateRange, OverviewChatMessage } from "@/types/google-ads";
+
+const MARKDOWN_COMPONENTS: Components = {
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-4 last:mb-0">{children}</ul>,
+  ol: ({ children }) => <ol className="mb-2 list-decimal space-y-1 pl-4 last:mb-0">{children}</ol>,
+  li: ({ children }) => <li>{children}</li>,
+  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  a: ({ children, href }) => (
+    <a href={href} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+      {children}
+    </a>
+  ),
+  code: ({ children }) => (
+    <code className="rounded bg-black/10 px-1 py-0.5 font-mono text-xs dark:bg-white/10">{children}</code>
+  ),
+  table: ({ children }) => (
+    <div className="mb-2 overflow-x-auto last:mb-0">
+      <table className="w-full border-collapse text-xs">{children}</table>
+    </div>
+  ),
+  th: ({ children }) => <th className="border-b px-2 py-1 text-left font-semibold">{children}</th>,
+  td: ({ children }) => <td className="border-b px-2 py-1">{children}</td>,
+};
 
 export function OverviewChatPanel({
   dateRange,
@@ -63,7 +89,9 @@ export function OverviewChatPanel({
                   m.role === "user" ? "self-end bg-primary text-primary-foreground" : "self-start bg-muted",
                 )}
               >
-                {m.content}
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+                  {m.content}
+                </ReactMarkdown>
               </div>
             ))}
           </div>
