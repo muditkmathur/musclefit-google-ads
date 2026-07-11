@@ -201,6 +201,7 @@ export async function runOverviewAnalysis(
 
   const thread: OverviewThread = {
     analysis: { generatedAt: new Date().toISOString(), dateRange, insights },
+    context,
     messages: [],
   };
 

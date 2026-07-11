@@ -577,6 +577,8 @@ export interface OverviewChatMessage {
 
 export interface OverviewThread {
   analysis: OverviewAnalysis;
+  /** Full per-campaign aggregate data (spend, QS bottlenecks, waste, competitors, etc.) the analysis was generated from — used to ground follow-up chat answers in specifics beyond the summary. Absent on threads cached before this field was added. */
+  context?: OverviewContext;
   messages: OverviewChatMessage[];
 }
 
