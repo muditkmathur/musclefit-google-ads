@@ -548,3 +548,60 @@ export interface ScopeOptions {
   generatedAt: string;
   campaigns: ScopeCampaign[];
 }
+
+// ---------------------------------------------------------------------------
+// Overview insights (homepage)
+// ---------------------------------------------------------------------------
+
+export type CampaignHealth = "on-track" | "needs-attention" | "at-risk";
+
+export interface CampaignInsight {
+  campaignId: string;
+  campaignName: string;
+  health: CampaignHealth;
+  summary: string;
+  nextSteps: string[];
+}
+
+export interface OverviewAnalysis {
+  generatedAt: string;
+  dateRange: DateRange;
+  insights: CampaignInsight[];
+}
+
+export interface OverviewChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+}
+
+export interface OverviewThread {
+  analysis: OverviewAnalysis;
+  messages: OverviewChatMessage[];
+}
+
+/** Compact per-campaign facts handed to Claude — aggregate numbers/flags only, never raw rows. */
+export interface OverviewCampaignContext {
+  campaignId: string;
+  campaignName: string;
+  status: string;
+  spend: number;
+  conversions: number;
+  cpa: number;
+  ctr: number;
+  impressionShare: number | null;
+  lostIsBudget: number | null;
+  lostIsRank: number | null;
+  avgQualityScore: number | null;
+  qualityScoreBottlenecks: Partial<Record<QualityScoreBottleneck, number>>;
+  topWasteLandingPages: Array<{ url: string; spend: number }>;
+  topWasteSearchTerms: Array<{ searchTerm: string; spend: number }>;
+  adStrengthCounts: Partial<Record<AdStrengthLabel, number>>;
+  topCompetitorDomains: Array<{ domain: string; impressionShare: number }>;
+  changeEventCount: number;
+}
+
+export interface OverviewContext {
+  dateRange: DateRange;
+  campaigns: OverviewCampaignContext[];
+}

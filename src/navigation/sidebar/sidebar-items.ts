@@ -8,6 +8,7 @@ import {
   Megaphone,
   Monitor,
   Search,
+  Sparkles,
   SquarePen,
   Star,
   TextSearch,
@@ -43,6 +44,11 @@ export const sidebarItems: NavGroup[] = [
     id: 1,
     label: "Google Ads",
     items: [
+      {
+        title: "Overview",
+        url: "/dashboard/overview",
+        icon: Sparkles,
+      },
       {
         title: "Campaigns",
         url: "/dashboard/campaigns",

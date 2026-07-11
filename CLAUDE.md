@@ -93,6 +93,7 @@ Stores CLI script output files (JSON, CSV). The `saveToDisk: true` option on `ru
 | `GOOGLE_ADS_CLIENT_SECRET` | Yes | OAuth2 client secret |
 | `GOOGLE_ADS_DEVELOPER_TOKEN` | Yes | Google Ads developer token |
 | `GOOGLE_ADS_CUSTOMER_ID` | Yes | Google Ads customer (account) ID |
+| `ANTHROPIC_API_KEY` | Yes (for Overview page) | Claude API key used by the Overview insights page and its follow-up chat |
 | `GOOGLE_ADS_REFRESH_TOKEN` | Fallback | Used if no token in Redis |
 | `NEXT_PUBLIC_APP_URL` | Yes | Base URL, used to build OAuth redirect URI |
 | `GOOGLE_ADS_OAUTH_REDIRECT_URI` | Alt | Explicit redirect URI (overrides NEXT_PUBLIC_APP_URL) |
