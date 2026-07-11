@@ -209,6 +209,20 @@ export async function runOverviewAnalysis(
   return thread;
 }
 
+function buildFollowupSystemPrompt(thread: OverviewThread): string {
+  const contextBlock = thread.context
+    ? `\n\nDetailed per-campaign data behind that summary (JSON): ${JSON.stringify(thread.context.campaigns)}`
+    : "\n\n(No detailed per-campaign data is available for this analysis — it was generated before this data started being retained. Answer using only the summary above.)";
+
+  return `You are a Google Ads performance analyst. The user previously received this per-campaign \
+analysis summary (JSON): ${JSON.stringify(thread.analysis.insights)}${contextBlock}
+
+Answer their follow-up questions grounded strictly in this data — prefer the detailed per-campaign data \
+when it's available and the question needs a specific number or fact, and fall back to the summary for \
+higher-level questions. If asked about something not covered by either, say so plainly rather than \
+guessing.`;
+}
+
 export async function askOverviewFollowup(dateRange: DateRange, question: string): Promise<OverviewChatMessage[]> {
   const thread = await loadOverviewThread(dateRange);
   if (!thread) {
@@ -228,10 +242,7 @@ export async function askOverviewFollowup(dateRange: DateRange, question: string
     model: OVERVIEW_MODEL,
     max_tokens: 2048,
     thinking: { type: "disabled" },
-    system: `You are a Google Ads performance analyst. The user previously received this per-campaign \
-analysis (JSON): ${JSON.stringify(thread.analysis.insights)}. Answer their follow-up questions grounded \
-strictly in this data. If asked about something not covered by the data, say so plainly rather than \
-guessing.`,
+    system: buildFollowupSystemPrompt(thread),
     messages: [...history, { role: "user" as const, content: question }],
   });
 
