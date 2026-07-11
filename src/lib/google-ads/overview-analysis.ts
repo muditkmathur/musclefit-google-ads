@@ -1,8 +1,10 @@
+import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
 import { getAnthropicClient, OVERVIEW_MODEL } from "@/lib/anthropic/client";
 import { buildCacheKey } from "@/lib/cache/query-cache";
 import { getRedis } from "@/lib/cache/redis";
+import { runAdGroupReport } from "@/lib/google-ads/ad-group-report";
 import { runAdPerformance } from "@/lib/google-ads/ad-performance";
 import { runAuctionInsights } from "@/lib/google-ads/auction-insights";
 import { runChangeHistory } from "@/lib/google-ads/change-history";
@@ -23,6 +25,127 @@ import type {
 
 const WASTE_TOP_N = 5;
 const COMPETITOR_TOP_N = 3;
+
+const CAMPAIGN_FILTER_PROPERTY = {
+  campaign: {
+    type: "string",
+    description: "Optional: filter to a specific campaign by name (partial match). Omit for all campaigns.",
+  },
+} as const;
+
+const FOLLOWUP_TOOLS: Anthropic.Tool[] = [
+  {
+    name: "get_campaign_report",
+    description:
+      "Campaign performance summary: impressions, clicks, spend, conversions, CTR, CPC, and impression share per campaign, for the analysis's date range.",
+    input_schema: { type: "object", properties: CAMPAIGN_FILTER_PROPERTY },
+  },
+  {
+    name: "get_ad_group_report",
+    description:
+      "Ad-group-level performance: impressions, clicks, spend, conversions, CPA, impression share, and lost impression share (budget/rank) per ad group, for the analysis's date range.",
+    input_schema: { type: "object", properties: CAMPAIGN_FILTER_PROPERTY },
+  },
+  {
+    name: "get_quality_score",
+    description:
+      "Per-keyword Quality Score (1-10) and its three components (expected CTR, ad relevance, landing page experience), plus the bottleneck classification (bid/QS/both/competitive) for each keyword, for the analysis's date range.",
+    input_schema: { type: "object", properties: CAMPAIGN_FILTER_PROPERTY },
+  },
+  {
+    name: "get_landing_page_report",
+    description:
+      "Landing page performance aggregated by URL: impressions, clicks, spend, conversions, CPA, conversion rate, and a waste flag (spend >= 500 with zero conversions), for the analysis's date range.",
+    input_schema: { type: "object", properties: CAMPAIGN_FILTER_PROPERTY },
+  },
+  {
+    name: "get_keyword_search_term_map",
+    description:
+      "Search terms mapped to the keyword that triggered them, with intent-mismatch, broad-trigger, and waste flags, for the analysis's date range.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ...CAMPAIGN_FILTER_PROPERTY,
+        adGroup: {
+          type: "string",
+          description: "Optional: filter to a specific ad group by name (partial match).",
+        },
+      },
+    },
+  },
+  {
+    name: "get_ad_performance",
+    description:
+      "Ad-level performance with RSA ad strength and per-asset (headline/description) performance labels, for the analysis's date range.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ...CAMPAIGN_FILTER_PROPERTY,
+        adGroup: {
+          type: "string",
+          description: "Optional: filter to a specific ad group by name (partial match).",
+        },
+      },
+    },
+  },
+  {
+    name: "get_auction_insights",
+    description:
+      "Competitor auction insights: domains you compete with, impression share, overlap rate, position-above rate, and outranking share, for the analysis's date range. Use to explain Lost IS (rank).",
+    input_schema: { type: "object", properties: CAMPAIGN_FILTER_PROPERTY },
+  },
+  {
+    name: "get_change_history",
+    description:
+      "Individual account change events (campaign/ad-group/keyword/budget/status edits) with their date, changed fields, old/new values, and who made the change. Use this to correlate specific account changes with performance shifts (e.g. a CPA spike or impression share drop) by comparing change dates to metric trends.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ...CAMPAIGN_FILTER_PROPERTY,
+        days: {
+          type: "number",
+          description: "How many days back to look for changes, from today. Defaults to 30, capped at 30.",
+        },
+      },
+    },
+  },
+];
+
+async function callFollowupTool(name: string, input: unknown, dateRange: DateRange): Promise<unknown> {
+  const params = (input ?? {}) as { campaign?: string; adGroup?: string; days?: number };
+  const campaign = params.campaign?.trim() || null;
+  const adGroup = params.adGroup?.trim() || null;
+
+  switch (name) {
+    case "get_campaign_report":
+      return runCampaignReport({
+        dateRange,
+        campaign,
+        includeDaily: false,
+        includeDemographics: false,
+        includePrevious: false,
+      });
+    case "get_ad_group_report":
+      return runAdGroupReport({ dateRange, campaign });
+    case "get_quality_score":
+      return runQualityScore({ dateRange, campaign });
+    case "get_landing_page_report":
+      return runLandingPageReport({ dateRange, campaign });
+    case "get_keyword_search_term_map":
+      return runKeywordSearchTermMap({ dateRange, campaign, adGroup, top: 300 });
+    case "get_ad_performance":
+      return runAdPerformance({ dateRange, campaign, adGroup });
+    case "get_auction_insights":
+      return runAuctionInsights({ dateRange, campaign });
+    case "get_change_history": {
+      const daysRaw = typeof params.days === "number" && Number.isFinite(params.days) ? params.days : 30;
+      const days = Math.min(Math.max(Math.floor(daysRaw), 1), 30);
+      return runChangeHistory({ days, campaign });
+    }
+    default:
+      throw new Error(`Unknown tool: ${name}`);
+  }
+}
 
 function topByField<T>(rows: T[], field: (row: T) => number, n: number): T[] {
   return [...rows].sort((a, b) => field(b) - field(a)).slice(0, n);
