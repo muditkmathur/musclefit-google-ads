@@ -346,6 +346,8 @@ higher-level questions. If asked about something not covered by either, say so p
 guessing.`;
 }
 
+const MAX_TOOL_ROUNDS = 6;
+
 export async function askOverviewFollowup(dateRange: DateRange, question: string): Promise<OverviewChatMessage[]> {
   const thread = await loadOverviewThread(dateRange);
   if (!thread) {
@@ -358,19 +360,51 @@ export async function askOverviewFollowup(dateRange: DateRange, question: string
   }
 
   const client = getAnthropicClient();
+  const system = buildFollowupSystemPrompt(thread);
 
-  const history = thread.messages.map((m) => ({ role: m.role, content: m.content }));
+  const history: Anthropic.MessageParam[] = thread.messages.map((m) => ({ role: m.role, content: m.content }));
+  const conversation: Anthropic.MessageParam[] = [...history, { role: "user", content: question }];
 
-  const response = await client.messages.create({
-    model: OVERVIEW_MODEL,
-    max_tokens: 2048,
-    thinking: { type: "disabled" },
-    system: buildFollowupSystemPrompt(thread),
-    messages: [...history, { role: "user" as const, content: question }],
-  });
+  let answer = "";
 
-  const textBlock = response.content.find((block) => block.type === "text");
-  const answer = textBlock && textBlock.type === "text" ? textBlock.text : "";
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+    const isLastRound = round === MAX_TOOL_ROUNDS - 1;
+
+    const response = await client.messages.create({
+      model: OVERVIEW_MODEL,
+      max_tokens: 2048,
+      thinking: { type: "disabled" },
+      system,
+      messages: conversation,
+      ...(isLastRound ? {} : { tools: FOLLOWUP_TOOLS }),
+    });
+
+    const toolUseBlocks = response.content.filter(
+      (block): block is Anthropic.ToolUseBlock => block.type === "tool_use",
+    );
+
+    if (response.stop_reason !== "tool_use" || toolUseBlocks.length === 0) {
+      const textBlock = response.content.find((block) => block.type === "text");
+      answer = textBlock && textBlock.type === "text" ? textBlock.text : "";
+      break;
+    }
+
+    conversation.push({ role: "assistant", content: response.content });
+
+    const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
+      toolUseBlocks.map(async (block): Promise<Anthropic.ToolResultBlockParam> => {
+        try {
+          const result = await callFollowupTool(block.name, block.input, dateRange);
+          return { type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result) };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return { type: "tool_result", tool_use_id: block.id, content: message, is_error: true };
+        }
+      }),
+    );
+
+    conversation.push({ role: "user", content: toolResults });
+  }
 
   const now = new Date().toISOString();
   const updatedMessages: OverviewChatMessage[] = [
