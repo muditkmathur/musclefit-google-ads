@@ -9,29 +9,47 @@ const MAX_DAYS = 30;
 /** Short TTL — change history is looked at to diagnose recent issues. */
 const CHANGE_HISTORY_TTL_SECONDS = 5 * 60;
 
+// Numeric values from ChangeEventResourceTypeEnum (google-ads-api v23 / API v23).
+// String keys are enum name aliases for any rows the library returns as strings.
 const RESOURCE_TYPE_LABELS: Record<string, string> = {
+  "2": "Ad",
+  AD: "Ad",
   "3": "Ad group",
   AD_GROUP: "Ad group",
-  "4": "Ad",
-  AD_GROUP_AD: "Ad",
-  "5": "Ad group asset",
-  AD_GROUP_ASSET: "Ad group asset",
-  "6": "Bid modifier",
-  AD_GROUP_BID_MODIFIER: "Bid modifier",
-  "7": "Keyword",
-  AD_GROUP_CRITERION: "Keyword",
-  "11": "Campaign",
+  "4": "Ad group criterion",
+  AD_GROUP_CRITERION: "Ad group criterion",
+  "5": "Campaign",
   CAMPAIGN: "Campaign",
-  "12": "Campaign asset",
-  CAMPAIGN_ASSET: "Campaign asset",
-  "14": "Campaign bid modifier",
-  CAMPAIGN_BID_MODIFIER: "Campaign bid modifier",
-  "15": "Budget",
+  "6": "Budget",
   CAMPAIGN_BUDGET: "Budget",
-  "16": "Campaign negative",
-  CAMPAIGN_CRITERION: "Campaign negative",
-  "22": "Shared set",
-  CAMPAIGN_SHARED_SET: "Shared set",
+  "7": "Ad group bid modifier",
+  AD_GROUP_BID_MODIFIER: "Ad group bid modifier",
+  "8": "Campaign criterion",
+  CAMPAIGN_CRITERION: "Campaign criterion",
+  "9": "Feed",
+  FEED: "Feed",
+  "10": "Feed item",
+  FEED_ITEM: "Feed item",
+  "11": "Campaign feed",
+  CAMPAIGN_FEED: "Campaign feed",
+  "12": "Ad group feed",
+  AD_GROUP_FEED: "Ad group feed",
+  "13": "Ad group ad",
+  AD_GROUP_AD: "Ad group ad",
+  "14": "Asset",
+  ASSET: "Asset",
+  "15": "Customer asset",
+  CUSTOMER_ASSET: "Customer asset",
+  "16": "Campaign asset",
+  CAMPAIGN_ASSET: "Campaign asset",
+  "17": "Ad group asset",
+  AD_GROUP_ASSET: "Ad group asset",
+  "18": "Asset set",
+  ASSET_SET: "Asset set",
+  "19": "Asset set asset",
+  ASSET_SET_ASSET: "Asset set asset",
+  "20": "Campaign asset set",
+  CAMPAIGN_ASSET_SET: "Campaign asset set",
 };
 
 const CLIENT_TYPE_LABELS: Record<string, string> = {
@@ -142,6 +160,32 @@ function extractKeyword(resource: AnyRecord | null): { text: string | null; matc
   };
 }
 
+function extractCampaignCriterionType(resource: AnyRecord | null): string | null {
+  if (!resource) return null;
+  const cc = asRecord(resource.campaign_criterion);
+  if (!cc) return null;
+  if (asRecord(cc.location)) return "location targeting";
+  if (asRecord(cc.location_group)) return "location group targeting";
+  if (asRecord(cc.language)) return "language targeting";
+  if (asRecord(cc.device)) return "device bid modifier";
+  if (asRecord(cc.ad_schedule)) return "ad schedule";
+  if (asRecord(cc.age_range)) return "age range targeting";
+  if (asRecord(cc.gender)) return "gender targeting";
+  if (asRecord(cc.keyword)) {
+    const kw = asRecord(cc.keyword);
+    const text = kw && typeof kw.text === "string" ? `"${kw.text}"` : "";
+    return `campaign negative keyword${text ? ` ${text}` : ""}`;
+  }
+  if (asRecord(cc.audience)) return "audience targeting";
+  if (asRecord(cc.user_list)) return "user list targeting";
+  if (asRecord(cc.ip_block)) return "IP block";
+  if (asRecord(cc.placement)) return "placement exclusion";
+  // Fall back to listing which sub-field is populated
+  const keys = Object.keys(cc).filter((k) => k !== "resource_name" && k !== "campaign" && k !== "criterion_id" && k !== "bid_modifier" && k !== "negative" && k !== "status" && k !== "type");
+  if (keys.length > 0) return keys[0].replace(/_/g, " ");
+  return null;
+}
+
 function buildSummary(event: {
   operation: ChangeEvent["operation"];
   resourceTypeLabel: string;
@@ -154,12 +198,16 @@ function buildSummary(event: {
   keywordMatchType: string | null;
   bidOld: number | null;
   bidNew: number | null;
+  campaignCriterionType: string | null;
 }): string {
   const parts: string[] = [];
 
   if (event.operation === "CREATE") {
     if (event.keywordText) {
       return `Added keyword "${event.keywordText}" (${event.keywordMatchType ?? "?"})`;
+    }
+    if (event.campaignCriterionType) {
+      return `Added ${event.campaignCriterionType}`;
     }
     return `Created ${event.resourceTypeLabel.toLowerCase()}`;
   }
@@ -304,6 +352,11 @@ async function fetchChangeHistory(
         ? extractKeyword(newResource.ad_group_criterion !== undefined ? newResource : oldResource)
         : { text: null, matchType: null };
 
+    const campaignCriterionType =
+      operation === "CREATE" || operation === "REMOVE"
+        ? extractCampaignCriterionType(newResource.campaign_criterion !== undefined ? newResource : oldResource)
+        : null;
+
     const resourceTypeLabel = RESOURCE_TYPE_LABELS[rawType] ?? rawType;
     const clientTypeLabel = CLIENT_TYPE_LABELS[rawClient] ?? rawClient;
 
@@ -319,6 +372,7 @@ async function fetchChangeHistory(
       keywordMatchType,
       bidOld,
       bidNew,
+      campaignCriterionType,
     };
 
     return {
