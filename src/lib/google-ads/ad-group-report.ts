@@ -19,7 +19,7 @@ export interface RunAdGroupReportOptions {
 export async function runAdGroupReport(options: RunAdGroupReportOptions): Promise<AdGroupReport> {
   const campaignFilter = options.campaign?.trim() || null;
 
-  const cacheKey = buildCacheKey("ad-groups:v2", {
+  const cacheKey = buildCacheKey("ad-groups:v3", {
     customerId: getCustomerId(),
     rangeStart: options.dateRange.start,
     rangeEnd: options.dateRange.end,
@@ -57,7 +57,6 @@ async function fetchAdGroupReport(
       metrics.cost_per_conversion,
       metrics.average_cpc,
       metrics.search_impression_share,
-      metrics.search_budget_lost_impression_share,
       metrics.search_rank_lost_impression_share,
       metrics.search_top_impression_share,
       metrics.search_absolute_top_impression_share
@@ -91,7 +90,7 @@ async function fetchAdGroupReport(
       cpa: conv > 0 ? `₹${cpaRaw.toFixed(2)}` : "N/A",
       cpaRaw,
       impressionShare: parseIsFraction(m.search_impression_share),
-      lostIsBudget: parseIsFraction(m.search_budget_lost_impression_share),
+      lostIsBudget: null, // not available at ad_group granularity
       lostIsRank: parseIsFraction(m.search_rank_lost_impression_share),
       topIs: parseIsFraction(m.search_top_impression_share),
       absoluteTopIs: parseIsFraction(m.search_absolute_top_impression_share),

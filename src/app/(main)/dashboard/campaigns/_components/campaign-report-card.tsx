@@ -212,6 +212,7 @@ function CampaignsSummaryTable({ campaigns }: { campaigns: CampaignSummaryRow[] 
 }
 
 const GRANULARITY_OPTIONS: ReadonlyArray<{ value: CampaignGranularity; label: string }> = [
+  { value: "hour", label: "Hour" },
   { value: "day", label: "Day" },
   { value: "week", label: "Week" },
   { value: "month", label: "Month" },
@@ -227,8 +228,17 @@ function CampaignReportCardContent() {
   const scope = useScope();
   const [dateRange] = useDateRange();
 
-  const [granularity, setGranularity] = useState<CampaignGranularity>("day");
+  const isSingleDay = dateRange.start === dateRange.end;
+  const [granularity, setGranularity] = useState<CampaignGranularity>(isSingleDay ? "hour" : "day");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (dateRange.start === dateRange.end) {
+      setGranularity("hour");
+    } else {
+      setGranularity((prev) => (prev === "hour" ? "day" : prev));
+    }
+  }, [dateRange.start, dateRange.end]);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<CampaignReport | null>(null);
   const [oauthNotice, setOauthNotice] = useState<OauthNotice>(null);
@@ -333,7 +343,7 @@ function CampaignReportCardContent() {
               <SelectContent>
                 <SelectGroup>
                   {GRANULARITY_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
+                    <SelectItem key={o.value} value={o.value} disabled={o.value === "hour" && !isSingleDay}>
                       {o.label}
                     </SelectItem>
                   ))}

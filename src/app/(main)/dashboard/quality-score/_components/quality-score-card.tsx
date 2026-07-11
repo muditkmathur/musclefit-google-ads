@@ -388,7 +388,7 @@ function QualityScoreTable({ report }: { report: QualityScoreReport }) {
           </TableHeader>
           <TableBody>
             {sorted.map((row) => (
-              <TableRow key={`${row.campaign}:${row.adGroup}:${row.keyword}`}>
+              <TableRow key={`${row.campaign}:${row.adGroup}:${row.keyword}:${row.matchType}`}>
                 <TableCell className="max-w-[200px] font-medium text-xs" title={row.keyword}>
                   {row.keyword}
                 </TableCell>

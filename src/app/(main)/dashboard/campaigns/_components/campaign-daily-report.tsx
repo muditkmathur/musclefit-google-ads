@@ -308,7 +308,8 @@ function startOfIsoWeek(date: Date): Date {
   return d;
 }
 
-function bucketKey(date: string, granularity: CampaignGranularity): string {
+function bucketKey(date: string, granularity: CampaignGranularity, hour?: number): string {
+  if (granularity === "hour") return String(hour ?? 0).padStart(2, "0");
   const d = new Date(`${date}T00:00:00`);
   if (granularity === "day") return date;
   if (granularity === "week") {
@@ -319,6 +320,13 @@ function bucketKey(date: string, granularity: CampaignGranularity): string {
 }
 
 function formatBucketLabel(key: string, granularity: CampaignGranularity): string {
+  if (granularity === "hour") {
+    const h = Number(key);
+    if (h === 0) return "12a";
+    if (h < 12) return `${h}a`;
+    if (h === 12) return "12p";
+    return `${h - 12}p`;
+  }
   if (granularity === "day") {
     const [, m, d] = key.split("-");
     return `${d}-${m}`;
@@ -420,7 +428,7 @@ function aggregateAllMetrics(
 ): BucketDatum[] {
   const map = new Map<string, BucketDatum>();
   for (const day of days) {
-    const key = bucketKey(day.date, granularity);
+    const key = bucketKey(day.date, granularity, day.hour);
     const existing = map.get(key) ?? {
       bucket: key,
       label: formatBucketLabel(key, granularity),
@@ -472,7 +480,7 @@ function aggregateMetricByCampaign(
   const map = new Map<string, CompareBucketDatum>();
   for (const c of campaigns) {
     for (const day of c.days) {
-      const key = bucketKey(day.date, granularity);
+      const key = bucketKey(day.date, granularity, day.hour);
       const existing =
         map.get(key) ??
         ({
@@ -563,7 +571,7 @@ export function CampaignDailyReportSection({ daily, demographics, granularity }:
     }
   }, [hasDemographics, view]);
 
-  const headerTitle = view === "demographics" ? "Demographics" : "Daily breakdown";
+  const headerTitle = view === "demographics" ? "Demographics" : granularity === "hour" ? "Hourly breakdown" : "Daily breakdown";
   const headerMeta =
     view === "demographics" && demographics
       ? `${demographics.period} (${demographics.date_range.start} → ${demographics.date_range.end}) · ${demographics.campaigns.length} campaigns`
@@ -988,6 +996,14 @@ function CombinedDailyView({ daily, granularity, chartType, mode }: CombinedDail
         </ToggleGroup>
       )}
 
+      {!showChart && isAggregate && (
+        <div className="flex h-32 items-center justify-center rounded-lg border border-border border-dashed text-muted-foreground text-sm">
+          {granularity === "hour"
+            ? "No hourly data available for this date. Switch to Day to see totals."
+            : "No data for this period."}
+        </div>
+      )}
+
       {showChart && (
         <div className="space-y-4">
           <div className="rounded-lg border bg-card p-4">
@@ -1063,7 +1079,9 @@ function CombinedDailyView({ daily, granularity, chartType, mode }: CombinedDail
               />
             ) : (
               <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-md border border-border border-dashed px-4 text-center text-muted-foreground text-sm">
-                No Impression Share data (non-search campaign)
+                {granularity === "hour"
+                  ? "Impression Share is not available at hourly granularity."
+                  : "No Impression Share data (non-search campaign)"}
               </div>
             )}
           </div>

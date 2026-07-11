@@ -50,7 +50,7 @@ export interface CampaignTotalsRaw {
 
 export type CampaignRangeKey = "last-7-days" | "last-4-weeks" | "last-3-months" | "year-to-date";
 
-export type CampaignGranularity = "day" | "week" | "month";
+export type CampaignGranularity = "hour" | "day" | "week" | "month";
 
 export interface CampaignReport {
   generated_at: string;
@@ -70,6 +70,7 @@ export interface CampaignReport {
 
 export interface CampaignDailyEntry {
   date: string;
+  hour?: number;
   impressions: number;
   clicks: number;
   ctr: number | null;

@@ -64,7 +64,7 @@ export interface RunQualityScoreOptions {
 export async function runQualityScore(options: RunQualityScoreOptions): Promise<QualityScoreReport> {
   const campaignFilter = options.campaign?.trim() || null;
 
-  const cacheKey = buildCacheKey("quality-score:v4", {
+  const cacheKey = buildCacheKey("quality-score:v5", {
     customerId: getCustomerId(),
     rangeStart: options.dateRange.start,
     rangeEnd: options.dateRange.end,
@@ -119,7 +119,7 @@ async function fetchQualityScore(
     ORDER BY metrics.cost_micros DESC
   `);
 
-  const qsRows: QualityScoreRow[] = rows.map((r): QualityScoreRow => {
+  const mapped = rows.map((r): QualityScoreRow => {
     const c = r.ad_group_criterion ?? {};
     const qi = (c as Record<string, unknown>).quality_info as Record<string, unknown> | null | undefined;
     const kw = (c as Record<string, unknown>).keyword as Record<string, unknown> | null | undefined;
@@ -162,6 +162,44 @@ async function fetchQualityScore(
   return {
     generatedAt: new Date().toISOString(),
     dateRange,
-    rows: qsRows,
+    rows: aggregateQualityScoreRows(mapped),
   };
+}
+
+function rowKey(row: QualityScoreRow): string {
+  return `${row.campaign}\0${row.adGroup}\0${row.keyword}\0${row.matchType}`;
+}
+
+/** keyword_view with a date filter returns one row per day; roll up to one row per keyword. */
+function aggregateQualityScoreRows(rows: QualityScoreRow[]): QualityScoreRow[] {
+  const byKey = new Map<string, QualityScoreRow>();
+
+  for (const row of rows) {
+    const key = rowKey(row);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, { ...row });
+      continue;
+    }
+
+    const impressions = existing.impressions + row.impressions;
+    const clicks = existing.clicks + row.clicks;
+    const spend = existing.spend + row.spend;
+    const conversions = existing.conversions + row.conversions;
+    const avgCpc = clicks > 0 ? spend / clicks : 0;
+
+    const snapshot = row.impressions > existing.impressions ? row : existing;
+
+    byKey.set(key, {
+      ...snapshot,
+      impressions,
+      clicks,
+      spend,
+      conversions,
+      avgCpc,
+      bottleneck: classifyBottleneck(snapshot.qualityScore, snapshot.maxCpcBid, snapshot.firstPageCpc),
+    });
+  }
+
+  return [...byKey.values()].sort((a, b) => b.spend - a.spend);
 }

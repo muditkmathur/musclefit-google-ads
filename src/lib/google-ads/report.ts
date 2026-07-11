@@ -288,6 +288,7 @@ export async function runCampaignReport(options: RunCampaignReportOptions): Prom
       rangeStart,
       rangeEnd,
       periodLabel: period,
+      granularity,
       forceRefresh,
       campaignFilter,
     });
@@ -301,6 +302,7 @@ export async function runCampaignReport(options: RunCampaignReportOptions): Prom
         rangeStart,
         rangeEnd,
         periodLabel: period,
+        granularity,
         forceRefresh,
         campaignFilter,
       });
@@ -341,20 +343,23 @@ interface DailyContext {
   rangeStart: string;
   rangeEnd: string;
   periodLabel: string;
+  granularity: CampaignGranularity;
   forceRefresh?: boolean;
   campaignFilter?: string | null;
 }
 
 async function getCampaignDailyReport(ctx: DailyContext): Promise<CampaignDailyReport> {
-  const { rangeStart, rangeEnd, periodLabel, forceRefresh, campaignFilter } = ctx;
-  const cacheKey = buildCacheKey("report:daily:v2", {
+  const { rangeStart, rangeEnd, periodLabel, granularity, forceRefresh, campaignFilter } = ctx;
+  const isHourly = granularity === "hour";
+  const cacheKey = buildCacheKey(isHourly ? "report:hourly:v1" : "report:daily:v2", {
     customerId: getCustomerId(),
     rangeStart,
     rangeEnd,
     periodLabel,
     campaignFilter: campaignFilter ?? null,
   });
-  return getOrSetJson<CampaignDailyReport>(cacheKey, () => getCampaignDailyReportUncached(ctx), undefined, {
+  const loader = isHourly ? () => getCampaignHourlyReportUncached(ctx) : () => getCampaignDailyReportUncached(ctx);
+  return getOrSetJson<CampaignDailyReport>(cacheKey, loader, undefined, {
     forceRefresh: forceRefresh === true,
   });
 }
@@ -470,6 +475,79 @@ async function getCampaignDailyReportUncached(ctx: DailyContext): Promise<Campai
       };
     });
 
+    campaigns.push({ campaign, days: enriched });
+  }
+
+  return {
+    generated_at: new Date().toISOString(),
+    period: periodLabel,
+    date_range: { start: rangeStart, end: rangeEnd },
+    campaigns,
+  };
+}
+
+async function getCampaignHourlyReportUncached(ctx: DailyContext): Promise<CampaignDailyReport> {
+  const { rangeStart, rangeEnd, periodLabel, campaignFilter } = ctx;
+  const gaqlDateFilter = `segments.date BETWEEN '${rangeStart}' AND '${rangeEnd}'`;
+  const campaignClause = campaignFilter ? ` AND campaign.name = '${escapeForGaql(campaignFilter)}'` : "";
+
+  const customer = await getCustomer();
+  const rows = await customer.query(`
+    SELECT
+      segments.date,
+      segments.hour,
+      campaign.name,
+      campaign.status,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.ctr,
+      metrics.cost_micros,
+      metrics.conversions,
+      metrics.average_cpc
+    FROM campaign
+    WHERE ${gaqlDateFilter}
+      AND campaign.status = 'ENABLED'${campaignClause}
+    ORDER BY campaign.name, segments.date, segments.hour
+  `);
+
+  const byCampaign = new Map<string, Array<{ date: string; hour: number; impressions: number; clicks: number; ctr: number; spend_micros: number; conversions: number; avg_cpc_micros: number }>>();
+  for (const r of rows) {
+    const name = String(r.campaign?.name ?? "");
+    const date = String(r.segments?.date ?? "");
+    const hour = Number(r.segments?.hour ?? 0);
+    const m = r.metrics ?? {};
+    const entry = {
+      date,
+      hour,
+      impressions: Number(m.impressions ?? 0),
+      clicks: Number(m.clicks ?? 0),
+      ctr: Number(m.ctr ?? 0),
+      spend_micros: Number(m.cost_micros ?? 0),
+      conversions: Number(m.conversions ?? 0),
+      avg_cpc_micros: Number(m.average_cpc ?? 0),
+    };
+    const list = byCampaign.get(name) ?? [];
+    list.push(entry);
+    byCampaign.set(name, list);
+  }
+
+  const campaigns: CampaignDailyReport["campaigns"] = [];
+  for (const [campaign, hourRows] of byCampaign.entries()) {
+    hourRows.sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour);
+    const enriched: CampaignDailyEntry[] = hourRows.map((r) => ({
+      date: r.date,
+      hour: r.hour,
+      impressions: r.impressions,
+      clicks: r.clicks,
+      ctr: Number.isFinite(r.ctr) ? +(r.ctr * 100).toFixed(4) : null,
+      spend: +(r.spend_micros / 1_000_000).toFixed(2),
+      conversions: r.conversions,
+      avg_cpc: +(r.avg_cpc_micros / 1_000_000).toFixed(2),
+      impressionShare: null,
+      lostIsBudget: null,
+      lostIsRank: null,
+      dod: null,
+    }));
     campaigns.push({ campaign, days: enriched });
   }
 

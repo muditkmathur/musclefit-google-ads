@@ -3,6 +3,8 @@ import { createStore } from "zustand/vanilla";
 import { last30Days } from "@/lib/date-presets";
 import type { DateRange } from "@/types/google-ads";
 
+import { persistDateRange } from "./filters-storage";
+
 export type FiltersState = {
   dateRange: DateRange;
   campaign: string | null;
@@ -16,6 +18,9 @@ export const createFiltersStore = () =>
     dateRange: last30Days(),
     campaign: null,
     adGroup: null,
-    setDateRange: (range) => set({ dateRange: range }),
+    setDateRange: (range) => {
+      persistDateRange(range);
+      set({ dateRange: range });
+    },
     setScope: (campaign, adGroup) => set({ campaign, adGroup }),
   }));

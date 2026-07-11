@@ -1,5 +1,7 @@
 "use server";
 
+import { redirect } from "next/navigation";
+
 import { runAdGroupReport } from "@/lib/google-ads/ad-group-report";
 import { runAdPerformance } from "@/lib/google-ads/ad-performance";
 import { runAuctionInsights } from "@/lib/google-ads/auction-insights";
@@ -36,7 +38,7 @@ import type {
   SearchTermsReport,
 } from "@/types/google-ads";
 
-const VALID_GRANULARITIES: readonly CampaignGranularity[] = ["day", "week", "month"];
+const VALID_GRANULARITIES: readonly CampaignGranularity[] = ["hour", "day", "week", "month"];
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -84,6 +86,12 @@ function toError(err: unknown): string {
   return err instanceof Error ? err.message : "Unknown error";
 }
 
+function isAuthError(err: unknown): boolean {
+  const { code, description } = oauthErrorFromUnknown(err);
+  const rawMessage = err instanceof Error ? err.message : "";
+  return `${code ?? ""} ${description ?? ""} ${rawMessage}`.toLowerCase().includes("invalid_grant");
+}
+
 export interface SearchTermsActionInput {
   months?: number;
   campaign?: string | null;
@@ -101,6 +109,7 @@ export async function getSearchTermsReport(
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -137,6 +146,7 @@ export async function getCampaignReport(input: CampaignReportActionInput): Promi
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -164,6 +174,7 @@ export async function getNgramAnalysis(
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -187,6 +198,7 @@ export async function analyzeNgramsFromRows(
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -212,6 +224,7 @@ export async function getCampaignKeywords(
     const data = await runCampaignKeywords({ campaignId, campaignName });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -236,6 +249,7 @@ export async function getQualityScore(input: QualityScoreActionInput): Promise<A
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -260,6 +274,7 @@ export async function getChangeHistory(
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -286,6 +301,7 @@ export async function getSchedulePerformance(
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -310,6 +326,7 @@ export async function getAdGroupReport(input: AdGroupReportActionInput): Promise
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -336,6 +353,7 @@ export async function getDevicePerformance(
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -362,6 +380,7 @@ export async function getLandingPageReport(
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -395,6 +414,7 @@ export async function getKeywordSearchTermMap(
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -422,6 +442,7 @@ export async function getAdPerformance(input: AdPerformanceActionInput): Promise
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -448,6 +469,7 @@ export async function getAuctionInsights(
     });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -477,6 +499,7 @@ export async function getKeywordAnalysisBundle(
 
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
@@ -487,6 +510,7 @@ export async function getScopeOptions(input: { forceRefresh?: boolean } = {}): P
     const data = await runScopeOptions({ forceRefresh: Boolean(input.forceRefresh) });
     return { ok: true, data };
   } catch (err) {
+    if (isAuthError(err)) redirect("/api/google-ads/oauth/authorize");
     console.error(err);
     return { ok: false, error: toError(err) };
   }
