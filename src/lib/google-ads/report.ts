@@ -510,7 +510,19 @@ async function getCampaignHourlyReportUncached(ctx: DailyContext): Promise<Campa
     ORDER BY campaign.name, segments.date, segments.hour
   `);
 
-  const byCampaign = new Map<string, Array<{ date: string; hour: number; impressions: number; clicks: number; ctr: number; spend_micros: number; conversions: number; avg_cpc_micros: number }>>();
+  const byCampaign = new Map<
+    string,
+    Array<{
+      date: string;
+      hour: number;
+      impressions: number;
+      clicks: number;
+      ctr: number;
+      spend_micros: number;
+      conversions: number;
+      avg_cpc_micros: number;
+    }>
+  >();
   for (const r of rows) {
     const name = String(r.campaign?.name ?? "");
     const date = String(r.segments?.date ?? "");

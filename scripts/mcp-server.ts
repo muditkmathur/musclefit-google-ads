@@ -22,6 +22,7 @@ import { runQualityScore } from "../src/lib/google-ads/quality-score";
 import { runCampaignReport } from "../src/lib/google-ads/report";
 import { runSchedulePerformance } from "../src/lib/google-ads/schedule-performance";
 import { runSearchTermsReport } from "../src/lib/google-ads/search-terms";
+import { runSearchConsoleReport } from "../src/lib/search-console/report";
 
 const GRANULARITIES = ["day", "week", "month"] as const;
 
@@ -29,7 +30,7 @@ const forceRefreshSchema = z
   .boolean()
   .optional()
   .default(false)
-  .describe("Bypass Redis cache and fetch fresh data from the API");
+  .describe("Bypass file cache and fetch fresh data from the API");
 
 const startDateSchema = z
   .string()
@@ -356,6 +357,36 @@ server.tool(
       const data = await runAuctionInsights({
         dateRange: { start: start_date, end: end_date },
         campaign: campaign ?? null,
+        forceRefresh: force_refresh,
+      });
+      return ok(data);
+    } catch (err) {
+      return fail(err);
+    }
+  },
+);
+
+server.tool(
+  "get_search_console_report",
+  "Organic Search Console performance (query × page): clicks, impressions, CTR, and average position. Use to analyze SEO performance, find top/losing queries and pages, or spot query-page intent mismatches. Separate data source/OAuth from Google Ads.",
+  {
+    start_date: startDateSchema,
+    end_date: endDateSchema,
+    site_url: z
+      .string()
+      .optional()
+      .describe(
+        "Search Console site to query (e.g. 'sc-domain:example.com'). Defaults to SEARCH_CONSOLE_SITE_URL env var or the account's sole site.",
+      ),
+    row_limit: z.number().int().positive().max(25000).optional().describe("Max rows to return (default 500)"),
+    force_refresh: forceRefreshSchema,
+  },
+  async ({ start_date, end_date, site_url, row_limit, force_refresh }) => {
+    try {
+      const data = await runSearchConsoleReport({
+        dateRange: { start: start_date, end: end_date },
+        siteUrl: site_url ?? null,
+        rowLimit: row_limit,
         forceRefresh: force_refresh,
       });
       return ok(data);

@@ -607,3 +607,31 @@ export interface OverviewContext {
   dateRange: DateRange;
   campaigns: OverviewCampaignContext[];
 }
+
+// ---------------------------------------------------------------------------
+// Search Console
+// ---------------------------------------------------------------------------
+
+export interface SearchConsoleRow {
+  query: string;
+  page: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export interface SearchConsoleTotals {
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export interface SearchConsoleReport {
+  generatedAt: string;
+  dateRange: DateRange;
+  siteUrl: string;
+  rows: SearchConsoleRow[];
+  totals: SearchConsoleTotals;
+}

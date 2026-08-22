@@ -1,4 +1,4 @@
-import { CACHE_TTL_SECONDS, getRedis } from "./redis";
+import { CACHE_TTL_SECONDS, fileStoreGet, fileStoreSet } from "./file-store";
 import { createHash } from "node:crypto";
 
 const KEY_PREFIX = "ga:";
@@ -30,28 +30,25 @@ export async function getOrSetJson<T>(
   ttlSeconds: number = CACHE_TTL_SECONDS,
   options: { forceRefresh?: boolean } = {},
 ): Promise<T> {
-  const client = getRedis();
   const forceRefresh = options.forceRefresh === true;
 
-  if (client && !forceRefresh) {
+  if (!forceRefresh) {
     try {
-      const hit = await client.get(key);
+      const hit = await fileStoreGet(key);
       if (hit) {
         return JSON.parse(hit) as T;
       }
     } catch (err) {
-      console.warn("[cache] Redis GET failed; falling back to loader.", err);
+      console.warn("[cache] File cache read failed; falling back to loader.", err);
     }
   }
 
   const value = await loader();
 
-  if (client) {
-    try {
-      await client.set(key, JSON.stringify(value), "EX", ttlSeconds);
-    } catch (err) {
-      console.warn("[cache] Redis SET failed; result not cached.", err);
-    }
+  try {
+    await fileStoreSet(key, JSON.stringify(value), ttlSeconds);
+  } catch (err) {
+    console.warn("[cache] File cache write failed; result not cached.", err);
   }
 
   return value;

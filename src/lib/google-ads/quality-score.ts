@@ -1,5 +1,5 @@
 import { buildCacheKey, getOrSetJson } from "@/lib/cache/query-cache";
-import { CACHE_TTL_SECONDS } from "@/lib/cache/redis";
+import { CACHE_TTL_SECONDS } from "@/lib/cache/file-store";
 import type {
   DateRange,
   QualityScoreBottleneck,

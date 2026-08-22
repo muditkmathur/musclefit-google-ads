@@ -12,6 +12,7 @@ import {
   SquarePen,
   Star,
   TextSearch,
+  TrendingUp,
 } from "lucide-react";
 
 export interface NavSubItem {
@@ -103,6 +104,17 @@ export const sidebarItems: NavGroup[] = [
         title: "Change history",
         url: "/dashboard/history",
         icon: History,
+      },
+    ],
+  },
+  {
+    id: 2,
+    label: "Search Console",
+    items: [
+      {
+        title: "Performance",
+        url: "/dashboard/search-console/performance",
+        icon: TrendingUp,
       },
     ],
   },

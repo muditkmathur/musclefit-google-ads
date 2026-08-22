@@ -1,19 +1,5 @@
 {
   "permissions": {
-    "deny": [
-      "Bash(git push*)",
-      "Bash(rm -rf *)",
-      "Bash(rm -r *)",
-      "Bash(rm -f *)",
-      "Bash(rm *)",
-      "Bash(rmdir *)",
-      "Bash(unlink *)",
-      "Bash(find * -delete)",
-      "Bash(find * -delete *)",
-      "Bash(find * -exec rm*)",
-      "Bash(git clean*)",
-      "Bash(trash *)"
-    ],
     "allow": [
       "Bash",
       "Edit",
@@ -40,7 +26,24 @@
       "mcp__google-ads__get_ad_performance",
       "mcp__google-ads__get_auction_insights",
       "mcp__claude-in-chrome__*",
-      "Skill"
+      "Skill",
+      "Bash(gcloud org-policies *)",
+      "Bash(tee /dev/stderr)",
+      "mcp__google-ads__get_search_console_report"
+    ],
+    "deny": [
+      "Bash(git push*)",
+      "Bash(rm -rf *)",
+      "Bash(rm -r *)",
+      "Bash(rm -f *)",
+      "Bash(rm *)",
+      "Bash(rmdir *)",
+      "Bash(unlink *)",
+      "Bash(find * -delete)",
+      "Bash(find * -delete *)",
+      "Bash(find * -exec rm*)",
+      "Bash(git clean*)",
+      "Bash(trash *)"
     ]
   },
   "enabledMcpjsonServers": [

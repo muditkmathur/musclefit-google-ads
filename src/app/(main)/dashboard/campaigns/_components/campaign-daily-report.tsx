@@ -571,7 +571,8 @@ export function CampaignDailyReportSection({ daily, demographics, granularity }:
     }
   }, [hasDemographics, view]);
 
-  const headerTitle = view === "demographics" ? "Demographics" : granularity === "hour" ? "Hourly breakdown" : "Daily breakdown";
+  const headerTitle =
+    view === "demographics" ? "Demographics" : granularity === "hour" ? "Hourly breakdown" : "Daily breakdown";
   const headerMeta =
     view === "demographics" && demographics
       ? `${demographics.period} (${demographics.date_range.start} → ${demographics.date_range.end}) · ${demographics.campaigns.length} campaigns`

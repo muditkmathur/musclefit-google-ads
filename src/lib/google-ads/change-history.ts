@@ -195,7 +195,16 @@ function extractCampaignCriterionType(resource: AnyRecord | null): string | null
   if (asRecord(cc.ip_block)) return "IP block";
   if (asRecord(cc.placement)) return "placement exclusion";
   // Fall back to listing which sub-field is populated
-  const keys = Object.keys(cc).filter((k) => k !== "resource_name" && k !== "campaign" && k !== "criterion_id" && k !== "bid_modifier" && k !== "negative" && k !== "status" && k !== "type");
+  const keys = Object.keys(cc).filter(
+    (k) =>
+      k !== "resource_name" &&
+      k !== "campaign" &&
+      k !== "criterion_id" &&
+      k !== "bid_modifier" &&
+      k !== "negative" &&
+      k !== "status" &&
+      k !== "type",
+  );
   if (keys.length > 0) return keys[0].replace(/_/g, " ");
   return null;
 }

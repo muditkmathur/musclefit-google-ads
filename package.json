@@ -19,7 +19,9 @@
     "search-terms": "tsx scripts/search-terms.ts",
     "ngram-analysis": "tsx scripts/ngram-analysis.ts",
     "campaign-keywords": "tsx scripts/campaign-keywords.ts",
-    "change-history": "tsx scripts/change-history.ts"
+    "change-history": "tsx scripts/change-history.ts",
+    "search-console-sites": "tsx scripts/search-console-sites.ts",
+    "search-console-report": "tsx scripts/search-console-report.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
@@ -39,7 +41,6 @@
     "geist": "^1.7.0",
     "google-ads-api": "^23.0.0",
     "input-otp": "^1.4.2",
-    "ioredis": "^5.4.1",
     "lucide-react": "^1.14.0",
     "next": "^16.2.4",
     "next-themes": "^0.4.6",

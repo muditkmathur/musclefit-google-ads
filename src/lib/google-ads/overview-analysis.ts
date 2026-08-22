@@ -2,8 +2,8 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
 import { getAnthropicClient, OVERVIEW_MODEL } from "@/lib/anthropic/client";
+import { fileStoreGet, fileStoreSet } from "@/lib/cache/file-store";
 import { buildCacheKey } from "@/lib/cache/query-cache";
-import { getRedis } from "@/lib/cache/redis";
 import { runAdGroupReport } from "@/lib/google-ads/ad-group-report";
 import { runAdPerformance } from "@/lib/google-ads/ad-performance";
 import { runAuctionInsights } from "@/lib/google-ads/auction-insights";
@@ -284,29 +284,25 @@ export async function generateCampaignInsights(context: OverviewContext): Promis
 
 const OVERVIEW_TTL_SECONDS = 60 * 60;
 
-function overviewRedisKey(dateRange: DateRange): string {
+function overviewStoreKey(dateRange: DateRange): string {
   return buildCacheKey("overview", dateRange as unknown as Record<string, unknown>);
 }
 
 export async function loadOverviewThread(dateRange: DateRange): Promise<OverviewThread | null> {
-  const client = getRedis();
-  if (!client) return null;
   try {
-    const raw = await client.get(overviewRedisKey(dateRange));
+    const raw = await fileStoreGet(overviewStoreKey(dateRange));
     return raw ? (JSON.parse(raw) as OverviewThread) : null;
   } catch (err) {
-    console.warn("[overview] Redis GET failed; treating as no cached thread.", err);
+    console.warn("[overview] File cache read failed; treating as no cached thread.", err);
     return null;
   }
 }
 
 async function saveOverviewThread(dateRange: DateRange, thread: OverviewThread): Promise<void> {
-  const client = getRedis();
-  if (!client) return;
   try {
-    await client.set(overviewRedisKey(dateRange), JSON.stringify(thread), "EX", OVERVIEW_TTL_SECONDS);
+    await fileStoreSet(overviewStoreKey(dateRange), JSON.stringify(thread), OVERVIEW_TTL_SECONDS);
   } catch (err) {
-    console.warn("[overview] Redis SET failed; thread not persisted.", err);
+    console.warn("[overview] File cache write failed; thread not persisted.", err);
   }
 }
 
@@ -351,11 +347,6 @@ const MAX_TOOL_ROUNDS = 6;
 export async function askOverviewFollowup(dateRange: DateRange, question: string): Promise<OverviewChatMessage[]> {
   const thread = await loadOverviewThread(dateRange);
   if (!thread) {
-    if (!getRedis()) {
-      throw new Error(
-        "Follow-up chat requires Redis to be configured (REDIS_HOST) to store the analysis between requests. Currently unavailable.",
-      );
-    }
     throw new Error("No analysis found for this date range — run Analyze first.");
   }
 

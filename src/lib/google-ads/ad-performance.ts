@@ -1,5 +1,5 @@
 import { buildCacheKey, getOrSetJson } from "@/lib/cache/query-cache";
-import { CACHE_TTL_SECONDS } from "@/lib/cache/redis";
+import { CACHE_TTL_SECONDS } from "@/lib/cache/file-store";
 import type {
   AdAssetFieldType,
   AdAssetPerformanceRow,
@@ -36,14 +36,38 @@ const AD_TYPE_LABELS: Record<string, string> = {
   UNSPECIFIED: "Unknown",
   "1": "Unknown",
   UNKNOWN: "Unknown",
-  "12": "Expanded text",
+  "2": "Text",
+  TEXT_AD: "Text",
+  "3": "Expanded text",
   EXPANDED_TEXT_AD: "Expanded text",
+  "7": "Expanded dynamic search",
+  EXPANDED_DYNAMIC_SEARCH_AD: "Expanded dynamic search",
+  "12": "Video",
+  VIDEO_AD: "Video",
+  "14": "Image",
+  IMAGE_AD: "Image",
   "15": "Responsive search",
   RESPONSIVE_SEARCH_AD: "Responsive search",
-  "17": "Call",
-  CALL_AD: "Call",
+  "16": "Responsive display",
+  LEGACY_RESPONSIVE_DISPLAY_AD: "Responsive display",
+  "17": "App",
+  APP_AD: "App",
+  "18": "App install",
+  LEGACY_APP_INSTALL_AD: "App install",
   "19": "Responsive display",
   RESPONSIVE_DISPLAY_AD: "Responsive display",
+  "20": "Local",
+  LOCAL_AD: "Local",
+  "23": "App engagement",
+  APP_ENGAGEMENT_AD: "App engagement",
+  "31": "Smart campaign",
+  SMART_CAMPAIGN_AD: "Smart campaign",
+  "32": "Call",
+  CALL_AD: "Call",
+  "33": "App pre-registration",
+  APP_PRE_REGISTRATION_AD: "App pre-registration",
+  "37": "Travel",
+  TRAVEL_AD: "Travel",
 };
 
 const ASSET_PERFORMANCE_LABELS: Record<string, AssetPerformanceLabel> = {

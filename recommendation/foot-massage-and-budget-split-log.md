@@ -63,6 +63,8 @@ Investigation found:
 
 5. **Known unrelated bug already fixed:** `CLIENT_TYPE_LABELS` in `src/lib/google-ads/change-history.ts` had incorrect enum mapping (codes 4–7 shifted, 8/9 unmapped) causing raw numbers to show in the `/dashboard/history` "via" column. Fixed and committed (`ba35e5b`) — codes 8 ("Mobile app") and 9 ("Recommendations") now render correctly.
 
+6. **Known limitation: Auction Insights API access is not enabled for this account's developer token.** `get_auction_insights` (MCP tool / `src/lib/google-ads/auction-insights.ts`) always returns empty with the warning `"Auction insight metrics are not enabled for this Google Ads developer token."` This account also has no visible **API Center** page under Admin or Tools (likely because it's a standalone account, not accessed via a Manager/MCC account) — so requesting elevated API access isn't currently self-serviceable from this account. The data **is** visible manually via the native Google Ads UI report (Campaigns → a campaign → Auction Insights tab, or Insights and reports → Auction insights) — competitor analysis is possible, just not programmatically. Workaround: user checks the UI report and shares a screenshot for interpretation. Don't re-investigate the API Center path from scratch next session — this was already checked (2026-07-21) and isn't there.
+
 ## Key numbers reference table
 
 | Date | Campaign structure | Combined CPA | Notes |

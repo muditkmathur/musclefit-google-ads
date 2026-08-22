@@ -36,7 +36,7 @@ A Next.js dashboard and CLI toolset for managing and reporting on Google Ads cam
 UI Component
   → Server Action (src/app/actions/google-ads.ts)
     → lib/google-ads/*.ts          ← business logic / GAQL queries
-      → lib/cache/query-cache.ts   ← Redis cache-aside (optional)
+      → lib/cache/query-cache.ts   ← file cache-aside
         → google-ads-api client    ← actual API call
 ```
 
@@ -45,7 +45,7 @@ All server actions return `ActionResult<T> = { ok: true; data: T } | { ok: false
 ### Google Ads API layer (`src/lib/google-ads/`)
 - **`client.ts`** — creates the `google-ads-api` `Customer` object per refresh token.
 - **`customer-cache.ts`** — module-level in-memory singleton that caches the `Customer` object keyed by refresh token. Invalidated by `resetGoogleAdsCustomerCache()` when the token changes via OAuth flow.
-- **`refresh-token.ts`** — resolves the refresh token: Redis key `ga:oauth:refresh_token` takes priority over `GOOGLE_ADS_REFRESH_TOKEN` env var. Updating via `setGoogleAdsRefreshTokenInCache()` also invalidates the in-memory customer cache.
+- **`refresh-token.ts`** — resolves the refresh token: file-store key `ga:oauth:refresh_token` (under `data/cache/`) takes priority over `GOOGLE_ADS_REFRESH_TOKEN` env var. Updating via `setGoogleAdsRefreshTokenInCache()` also invalidates the in-memory customer cache.
 - **`oauth.ts`** — PKCE + OAuth2 flow helpers; authorize route is `/api/google-ads/oauth/authorize`, callback is `/api/google-ads/oauth/callback`.
 - **`report.ts`** — campaign summary, daily breakdown (DoD deltas), and demographics (age_range_view / gender_view) reports.
 - **`search-terms.ts`**, **`ngram-analysis.ts`**, **`keyword-analysis.ts`**, **`campaign-keywords.ts`** — search term and keyword analysis modules.
@@ -62,7 +62,7 @@ All domain TypeScript types are centralized in **`src/types/google-ads.ts`** —
 ### Caching (`src/lib/cache/`)
 There are two caching layers:
 1. **In-memory**: `customer-cache.ts` holds a module-level `Customer` singleton, keyed by refresh token. Survives the process lifetime; reset on token rotation.
-2. **Redis cache-aside**: `query-cache.ts` wraps report calls. Redis is optional — if `REDIS_HOST` is absent the app runs fine without it.
+2. **File cache-aside**: `query-cache.ts` wraps report calls, backed by `file-store.ts` which persists JSON entries under `data/cache/` (filename is a SHA-1 hash of the key), with an expiry timestamp per entry.
 
 `getOrSetJson(key, loader, ttlSeconds, { forceRefresh })` is the single cache-aside primitive. Cache keys are built via `buildCacheKey(namespace, input)` — SHA-1 hash of a stable-stringified input object, prefixed `ga:`. Default TTL is 1 hour (`CACHE_TTL_SECONDS = 3600`). Pass `forceRefresh: true` to bypass.
 
@@ -94,13 +94,9 @@ Stores CLI script output files (JSON, CSV). The `saveToDisk: true` option on `ru
 | `GOOGLE_ADS_DEVELOPER_TOKEN` | Yes | Google Ads developer token |
 | `GOOGLE_ADS_CUSTOMER_ID` | Yes | Google Ads customer (account) ID |
 | `ANTHROPIC_API_KEY` | Yes (for Overview page) | Claude API key used by the Overview insights page and its follow-up chat |
-| `GOOGLE_ADS_REFRESH_TOKEN` | Fallback | Used if no token in Redis |
+| `GOOGLE_ADS_REFRESH_TOKEN` | Fallback | Used if no token stored in `data/cache/` |
 | `NEXT_PUBLIC_APP_URL` | Yes | Base URL, used to build OAuth redirect URI |
 | `GOOGLE_ADS_OAUTH_REDIRECT_URI` | Alt | Explicit redirect URI (overrides NEXT_PUBLIC_APP_URL) |
-| `REDIS_HOST` | No | Enables query caching; app works without it |
-| `REDIS_PORT` | No | Defaults to 6379 |
-| `REDIS_DB` | No | Defaults to 0 |
-| `REDIS_PASSWORD` | No | |
 
 ## Biome (lint/format)
 - 2-space indent, 120-char line width, double quotes, trailing commas.
@@ -111,7 +107,7 @@ Stores CLI script output files (JSON, CSV). The `saveToDisk: true` option on `ru
 
 ## MCP server (`scripts/mcp-server.ts`)
 
-Registered in `.mcp.json` and `.cursor/mcp.json`. Cursor must enable the **google-ads** server (Settings → Tools & MCP). All tools accept optional `force_refresh: boolean` to bypass Redis cache.
+Registered in `.mcp.json` and `.cursor/mcp.json`. Cursor must enable the **google-ads** server (Settings → Tools & MCP). All tools accept optional `force_refresh: boolean` to bypass the file cache.
 
 | Tool | Lib function |
 |------|----------------|
